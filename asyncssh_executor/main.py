@@ -8,7 +8,7 @@ from typing import List, Callable, Any, TypedDict
 
 
 @dataclass
-class SSHHost:
+class RemoteHost:
     ip: str
     username: str
     password: str | None = None
@@ -44,13 +44,13 @@ class SSHConnectionParams:
 
 
 class SshExecutionError(Exception):
-    def __init__(self, host: SSHHost, message: str | None):
+    def __init__(self, host: RemoteHost, message: str | None):
         super().__init__(f"SSH access denied for {host}: {message}")
         self.host = host
         self.message = message
 
 
-class AsyncSSHExecutor:
+class Runner:
     def __init__(self, params: SSHConnectionParams = SSHConnectionParams()) -> None:
         self.connection_parameters: SSHConnectionParams = params
         self._connection_pool: dict[str, asyncssh.SSHClientConnection] = {}
@@ -81,7 +81,7 @@ class AsyncSSHExecutor:
                         raise
                 timeout = min(timeout * factor, max_timeout)
 
-    async def _create_connection(self, host: SSHHost) -> asyncssh.SSHClientConnection:
+    async def _create_connection(self, host: RemoteHost) -> asyncssh.SSHClientConnection:
         start_time = time.time()
         ip = host.ip
         username = host.username
@@ -112,7 +112,7 @@ class AsyncSSHExecutor:
     async def close_all_connections(self) -> None:
         self.logger.info("Closing all SSH connections...")
 
-        async def _close_single_connection(host: SSHHost, connection):
+        async def _close_single_connection(host: RemoteHost, connection):
             try:
                 connection.close()
                 self.logger.info(f"Closed connection to {host}")
@@ -130,7 +130,7 @@ class AsyncSSHExecutor:
         self._connection_pool.clear()
         self.logger.info("All SSH connections closed")
 
-    async def _get_connection(self, host: SSHHost) -> asyncssh.SSHClientConnection:
+    async def _get_connection(self, host: RemoteHost) -> asyncssh.SSHClientConnection:
         ip = host.ip
         connection: asyncssh.SSHClientConnection | None = self._connection_pool.get(ip)
         if not connection:
@@ -146,7 +146,7 @@ class AsyncSSHExecutor:
         else:
             return connection
 
-    async def _execute_ssh_command(self, host: SSHHost, command: str) -> SshResponse:
+    async def _execute_ssh_command(self, host: RemoteHost, command: str) -> SshResponse:
         start_time = time.time()
         try:
             conn = await self._get_connection(host)
@@ -232,22 +232,22 @@ class AsyncSSHExecutor:
                 "execution_time": execution_time,
             }
 
-    async def execute_ssh_command(self, host: SSHHost, command: str) -> SshResponse:
+    async def execute_ssh_command(self, host: RemoteHost, command: str) -> SshResponse:
         return await self._execute_ssh_command(host, command)
 
 
-class AsyncBatchSSHExecutor:
+class BatchRunner:
     def __init__(
-        self, hosts: list[SSHHost], params: SSHConnectionParams = SSHConnectionParams()
+        self, hosts: list[RemoteHost], params: SSHConnectionParams = SSHConnectionParams()
     ) -> None:
-        self.executor: AsyncSSHExecutor = AsyncSSHExecutor(params=params)
-        self.hosts: dict[str, SSHHost] = {str(host): host for host in hosts}
+        self.executor: Runner = Runner(params=params)
+        self.hosts: dict[str, RemoteHost] = {str(host): host for host in hosts}
         self.logger = getLogger()
 
     async def initialize_connection_pool(self) -> None:
         start_time = time.time()
 
-        ssh_host_list: list[SSHHost] = list(self.hosts.values())
+        ssh_host_list: list[RemoteHost] = list(self.hosts.values())
         if not ssh_host_list:
             raise ValueError("No SSH hosts are given to initialize connections with.")
 
@@ -257,7 +257,7 @@ class AsyncBatchSSHExecutor:
 
         semaphore = asyncio.Semaphore(100)
 
-        async def _create_connection_with_limit(host: SSHHost):
+        async def _create_connection_with_limit(host: RemoteHost):
             async with semaphore:
                 return await self.executor._create_connection(host)
 
@@ -290,7 +290,7 @@ class AsyncBatchSSHExecutor:
         start_time: float = time.time()
         semaphore = asyncio.Semaphore(100)
 
-        async def worker(host: SSHHost):
+        async def worker(host: RemoteHost):
             async with semaphore:
                 try:
                     return await self.executor._execute_ssh_command(host, command)
