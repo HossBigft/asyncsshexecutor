@@ -1,7 +1,7 @@
 [project]
 name = "asyncssh-executor"
 version = "0.1.0"
-description = "Add your description here"
+description = "Module for async execution of commands over SSH"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
