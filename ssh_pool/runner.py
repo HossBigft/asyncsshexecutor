@@ -157,7 +157,7 @@ class Runner:
         else:
             return connection
 
-    async def _run(self, host: RemoteHost, command: str) -> SshResponse:
+    async def run(self, host: RemoteHost, command: str) -> SshResponse:
         start_time = time.time()
         try:
             conn = await self._get_connection(host)
@@ -243,8 +243,6 @@ class Runner:
                 "execution_time": execution_time,
             }
 
-    async def run(self, host: RemoteHost, command: str) -> SshResponse:
-        return await self._run(host, command)
 
 
 class Pool:
@@ -311,7 +309,7 @@ class Pool:
         async def worker(host: RemoteHost):
             async with semaphore:
                 try:
-                    return await self.executor._run(host, command)
+                    return await self.executor.run(host, command)
                 except Exception as e:
                     return e
 
