@@ -23,6 +23,8 @@ class SSHHost:
                 "Either 'password' or 'private_key_path' must be provided for SSH authentication."
             )
 
+    def __str__(self) -> str:
+        return self.ip
 
 class SshResponse(TypedDict):
     host: SSHHost
