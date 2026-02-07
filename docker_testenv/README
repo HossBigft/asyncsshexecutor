@@ -1,0 +1,10 @@
+To spin up 6 test containers, 5 is default. 
+```
+start-ssh-containers.sh 10
+```
+
+To connect, `testpass` default password
+```
+testuser@localhost -p 2222
+```
+
