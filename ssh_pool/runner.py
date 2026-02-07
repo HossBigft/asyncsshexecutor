@@ -303,7 +303,7 @@ class Pool:
 
     async def run(self, command: str) -> List[SshResponse | Exception]:
         start_time: float = time.time()
-        semaphore = asyncio.Semaphore(100)
+        semaphore = asyncio.Semaphore(self.max_concurrency)
 
         async def worker(host: RemoteHost):
             async with semaphore:
