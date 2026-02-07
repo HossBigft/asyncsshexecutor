@@ -11,20 +11,29 @@ async def main():
             RemoteHost(ip="127.0.0.1", username="testuser", password="testpass", port=i)
         )
     # print("Single run")
-    exec = Runner()
-    result = await exec.run(hosts[0], "ls -l /")
+    ssh_runner = Runner()
+    result = await ssh_runner.run(hosts[0], "ls -l /")
     print(json.dumps(result))
 
     # print("Batch run without warmup")
-    batch = Pool(hosts=hosts)
-    results = await batch.run("ls -l /")
+    ssh_password_pool = Pool(hosts=hosts)
+    results = await ssh_password_pool.run("ls -l /")
     print(json.dumps(results))
 
-    await batch.warmup()
+    await ssh_password_pool.warmup()
     # print("Batch run after warmup")
-    results = await batch.run("ls -l /")
+    results = await ssh_password_pool.run("ls -l /")
     print(json.dumps(results))
-
+    
+    
+    key_hosts: list[RemoteHost] = [] 
+    for i in range(2222, 2222 + 5):
+        key_hosts.append(
+            RemoteHost(ip="127.0.0.1", username="testuser", password="testpass", port=i)
+        )
+    ssh_key_pool = Pool(hosts=key_hosts)
+    results = await ssh_key_pool.run("ls -l /")
+    print(json.dumps(results))
 
 if __name__ == "__main__":
     uvloop.run(main())

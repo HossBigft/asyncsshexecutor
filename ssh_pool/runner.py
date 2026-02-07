@@ -88,19 +88,37 @@ class Runner:
         ip = host.ip
         username = host.username
         try:
-            connection = await self.run_with_adaptive_timeout(
-                lambda: asyncssh.connect(
-                    ip,
-                    username=username,
-                    password=host.password,
-                    port=host.port,
-                    known_hosts=self.connection_parameters.known_hosts,
-                    login_timeout=self.connection_parameters.login_timeout_s,
-                ),
-                base_timeout=self.connection_parameters.connection_timeout_s,
-                max_timeout=self.connection_parameters.max_connection_timeout_s,
-                max_retries=3,
-            )
+            connection: asyncssh.SSHClientConnection
+            if host.private_key_path:
+                private_key = asyncssh.read_private_key(host.private_key_path)
+                connection = await self.run_with_adaptive_timeout(
+                    lambda: asyncssh.connect(
+                        ip,
+                        username=username,
+                        private_key=private_key,
+                        port=host.port,
+                        known_hosts=self.connection_parameters.known_hosts,
+                        login_timeout=self.connection_parameters.login_timeout_s,
+                    ),
+                    base_timeout=self.connection_parameters.connection_timeout_s,
+                    max_timeout=self.connection_parameters.max_connection_timeout_s,
+                    max_retries=3,
+                )
+            else:
+                connection = await self.run_with_adaptive_timeout(
+                    lambda: asyncssh.connect(
+                        ip,
+                        username=username,
+                        password=host.password,
+                        port=host.port,
+                        known_hosts=self.connection_parameters.known_hosts,
+                        login_timeout=self.connection_parameters.login_timeout_s,
+                    ),
+                    base_timeout=self.connection_parameters.connection_timeout_s,
+                    max_timeout=self.connection_parameters.max_connection_timeout_s,
+                    max_retries=3,
+                )
+
             self._connection_pool[ip] = connection
             return connection
         except asyncio.TimeoutError as e:
@@ -295,9 +313,7 @@ class Pool:
             f"Connection pool initialized in {execution_time}s: {successful_connections} successful, {failed_connections} failed"
         )
 
-    async def run(
-        self, command: str
-    ) -> List[SshResponse | Exception]:
+    async def run(self, command: str) -> List[SshResponse | Exception]:
         start_time: float = time.time()
         semaphore = asyncio.Semaphore(100)
 
