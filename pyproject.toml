@@ -1,5 +1,5 @@
 [project]
-name = "asyncssh-executor"
+name = "asyncssh_executor"
 version = "0.1.0"
 description = "Module for async execution of commands over SSH"
 readme = "README.md"
