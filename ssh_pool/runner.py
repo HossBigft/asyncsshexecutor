@@ -320,6 +320,9 @@ class Pool:
         )
         return results
 
+    async def run_on_host(self, command: str, host: RemoteHost) -> SshResponse:
+        return await self.executor.run(command=command, host=host)
+
 
 def main():
     print("Hello from asyncssh-executor!")

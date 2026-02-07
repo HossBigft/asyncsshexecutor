@@ -3,6 +3,7 @@ from ssh_pool.runner import Runner, RemoteHost, Pool
 import json
 import uvloop
 
+
 async def main():
     hosts: list[RemoteHost] = []
 
@@ -24,9 +25,8 @@ async def main():
     # print("Batch run after warmup")
     results = await ssh_password_pool.run("ls -l /")
     print(json.dumps(results))
-    
-    
-    key_hosts: list[RemoteHost] = [] 
+
+    key_hosts: list[RemoteHost] = []
     for i in range(2222, 2222 + 5):
         key_hosts.append(
             RemoteHost(ip="127.0.0.1", username="testuser", password="testpass", port=i)
@@ -34,6 +34,10 @@ async def main():
     ssh_key_pool = Pool(hosts=key_hosts)
     results = await ssh_key_pool.run("ls -l /")
     print(json.dumps(results))
+
+    result = ssh_key_pool.run_on_host(host=key_hosts[0], command="ls -l /")
+    print(json.dumps(result))
+
 
 if __name__ == "__main__":
     uvloop.run(main())
