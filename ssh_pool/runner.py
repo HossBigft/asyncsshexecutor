@@ -123,7 +123,7 @@ class Runner:
     async def close_connection(self) -> None:
         self.logger.info("Closing all SSH connections...")
 
-        async def _close_single_connection(host: RemoteHost, connection):
+        async def _close_single_connection(host: str, connection):
             try:
                 connection.close()
                 self.logger.info(f"Closed connection to {host}")
@@ -242,7 +242,6 @@ class Runner:
                 "returncode": -1,
                 "execution_time": execution_time,
             }
-
 
 
 class Pool:
