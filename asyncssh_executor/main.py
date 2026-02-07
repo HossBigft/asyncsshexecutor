@@ -88,6 +88,8 @@ class AsyncSSHExecutor:
                 lambda: asyncssh.connect(
                     ip,
                     username=username,
+                    password=host.password,
+                    port=host.port,
                     known_hosts=self.connection_parameters.known_hosts,
                     login_timeout=self.connection_parameters.login_timeout_s,
                 ),
