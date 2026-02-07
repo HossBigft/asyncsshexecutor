@@ -35,7 +35,7 @@ class SshResponse(TypedDict):
 
 
 @dataclass
-class SSHConnectionParams:
+class ConnectionParams:
     known_hosts: list[str] | None = None
     login_timeout_s: int = 3
     execution_timeout_s: int = 5
@@ -51,8 +51,8 @@ class SshExecutionError(Exception):
 
 
 class Runner:
-    def __init__(self, params: SSHConnectionParams = SSHConnectionParams()) -> None:
-        self.connection_parameters: SSHConnectionParaSSHConnectionParamsms = params
+    def __init__(self, params: ConnectionParams = ConnectionParams()) -> None:
+        self.connection_parameters: ConnectionParams = params
         self._connection_pool: dict[str, asyncssh.SSHClientConnection] = {}
         self.logger = getLogger()
 
@@ -243,7 +243,7 @@ class Pool:
     def __init__(
         self,
         hosts: list[RemoteHost],
-        params: SSHConnectionParams = SSHConnectionParams(),
+        params: ConnectionParams = ConnectionParams(),
         max_concurrency: int = 100,
     ) -> None:
         if not hosts:
