@@ -56,31 +56,6 @@ class Runner:
         self._connection_pool: dict[str, asyncssh.SSHClientConnection] = {}
         self.logger = getLogger()
 
-    async def _run_with_adaptive_timeout(
-        self,
-        coro_factory: Callable[..., Any],
-        base_timeout: float = 1.0,
-        factor: float = 2.0,
-        max_timeout: float = 10.0,
-        max_retries: int | None = None,
-    ) -> Any:
-        if base_timeout > max_timeout:
-            tmp = max_timeout
-            max_timeout = base_timeout
-            base_timeout = tmp
-        timeout = base_timeout
-        attempt = 0
-
-        while timeout <= max_timeout:
-            try:
-                return await asyncio.wait_for(coro_factory(), timeout=timeout)
-            except asyncio.TimeoutError:
-                if max_retries is not None:
-                    attempt += 1
-                    if attempt > max_retries:
-                        raise
-                timeout = min(timeout * factor, max_timeout)
-
     async def _create_connection(
         self, host: RemoteHost
     ) -> asyncssh.SSHClientConnection:
