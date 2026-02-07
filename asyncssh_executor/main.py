@@ -2,7 +2,6 @@ import asyncio
 import asyncssh
 import time
 
-
 from dataclasses import dataclass
 from logging import getLogger
 from typing import List, Callable, Any, TypedDict
@@ -27,7 +26,7 @@ class SSHHost:
         return self.ip
 
 class SshResponse(TypedDict):
-    host: SSHHost
+    host: str
     stdout: str | None
     stderr: str | None
     returncode: int | None
@@ -184,7 +183,7 @@ class AsyncSSHExecutor:
             returncode_output: int | None = result.exit_status
 
             return {
-                "host": host,
+                "host": str(host),
                 "stdout": stdout_output,
                 "stderr": filtered_stderr_output,
                 "returncode": returncode_output,
