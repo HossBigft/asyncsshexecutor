@@ -91,32 +91,23 @@ class Runner:
             connection: asyncssh.SSHClientConnection
             if host.private_key_path:
                 private_key = asyncssh.read_private_key(host.private_key_path)
-                connection = await self.run_with_adaptive_timeout(
-                    lambda: asyncssh.connect(
-                        ip,
-                        username=username,
-                        private_key=private_key,
-                        port=host.port,
-                        known_hosts=self.connection_parameters.known_hosts,
-                        login_timeout=self.connection_parameters.login_timeout_s,
-                    ),
-                    base_timeout=self.connection_parameters.connection_timeout_s,
-                    max_timeout=self.connection_parameters.max_connection_timeout_s,
-                    max_retries=3,
+                connection = await asyncssh.connect(
+                    ip,
+                    username=username,
+                    private_key=private_key,
+                    port=host.port,
+                    known_hosts=self.connection_parameters.known_hosts,
+                    login_timeout=self.connection_parameters.login_timeout_s,
                 )
+
             else:
-                connection = await self.run_with_adaptive_timeout(
-                    lambda: asyncssh.connect(
-                        ip,
-                        username=username,
-                        password=host.password,
-                        port=host.port,
-                        known_hosts=self.connection_parameters.known_hosts,
-                        login_timeout=self.connection_parameters.login_timeout_s,
-                    ),
-                    base_timeout=self.connection_parameters.connection_timeout_s,
-                    max_timeout=self.connection_parameters.max_connection_timeout_s,
-                    max_retries=3,
+                connection = await asyncssh.connect(
+                    ip,
+                    username=username,
+                    password=host.password,
+                    port=host.port,
+                    known_hosts=self.connection_parameters.known_hosts,
+                    login_timeout=self.connection_parameters.login_timeout_s,
                 )
 
             self._connection_pool[ip] = connection
