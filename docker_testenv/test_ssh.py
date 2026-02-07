@@ -1,4 +1,4 @@
-from asyncssh_executor.main import Runner, RemoteHost, BatchRunner
+from ssh_pool.runner import Runner, RemoteHost, BatchRunner
 
 import asyncio
 import json
@@ -20,7 +20,7 @@ async def main():
     batch = BatchRunner(hosts=hosts)
     results = await batch.execute_ssh_commands_in_batch("ls -l /")
     print(json.dumps(results))
-    
+
     # print("Batch run after warmup")
     results = await batch.execute_ssh_commands_in_batch("ls -l /")
     print(json.dumps(results))

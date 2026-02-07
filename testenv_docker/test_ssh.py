@@ -1,4 +1,4 @@
-from asyncssh_executor.main import Runner, RemoteHost
+from ssh_pool.runner import Runner, RemoteHost
 
 import asyncio
 import json

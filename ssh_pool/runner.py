@@ -81,7 +81,9 @@ class Runner:
                         raise
                 timeout = min(timeout * factor, max_timeout)
 
-    async def _create_connection(self, host: RemoteHost) -> asyncssh.SSHClientConnection:
+    async def _create_connection(
+        self, host: RemoteHost
+    ) -> asyncssh.SSHClientConnection:
         start_time = time.time()
         ip = host.ip
         username = host.username
@@ -238,7 +240,9 @@ class Runner:
 
 class BatchRunner:
     def __init__(
-        self, hosts: list[RemoteHost], params: SSHConnectionParams = SSHConnectionParams()
+        self,
+        hosts: list[RemoteHost],
+        params: SSHConnectionParams = SSHConnectionParams(),
     ) -> None:
         self.executor: Runner = Runner(params=params)
         self.hosts: dict[str, RemoteHost] = {str(host): host for host in hosts}
