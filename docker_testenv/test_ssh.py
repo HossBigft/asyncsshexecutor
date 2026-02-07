@@ -1,8 +1,7 @@
 from ssh_pool.runner import Runner, RemoteHost, BatchRunner
 
-import asyncio
 import json
-
+import uvloop
 
 async def main():
     hosts: list[RemoteHost] = []
@@ -27,4 +26,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    uvloop.run(main())
