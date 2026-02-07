@@ -8,3 +8,12 @@ To connect, `testpass` default password
 testuser@localhost -p 2222
 ```
 
+To test ssh connection, init venv
+```
+uv  sync
+```
+
+Then in root dir
+```
+python -m docker_testenv.test_ssh
+```
