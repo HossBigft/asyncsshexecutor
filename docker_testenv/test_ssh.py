@@ -1,4 +1,4 @@
-from ssh_pool.runner import Runner, RemoteHost, BatchRunner
+from ssh_pool.runner import Runner, RemoteHost, Pool
 
 import json
 import uvloop
@@ -16,7 +16,7 @@ async def main():
     print(json.dumps(result))
 
     # print("Batch run without warmup")
-    batch = BatchRunner(hosts=hosts)
+    batch = Pool(hosts=hosts)
     results = await batch.execute_ssh_commands_in_batch("ls -l /")
     print(json.dumps(results))
 

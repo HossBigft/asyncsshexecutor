@@ -238,7 +238,7 @@ class Runner:
         return await self._execute_ssh_command(host, command)
 
 
-class BatchRunner:
+class Pool:
 
     def __init__(
         self,
