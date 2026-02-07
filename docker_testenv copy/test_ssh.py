@@ -4,7 +4,7 @@ from ssh_pool.runner import Runner, RemoteHost
 def main():
     params = RemoteHost(ip="127.0.0.1", username="testuser", password="testpass")
     exec = Runner()
-    print(exec.execute_ssh_command(params, "ls -l /"))
+    print(exec.run(params, "ls -l /"))
 
 
 if __name__ == "__main__":

@@ -12,17 +12,17 @@ async def main():
         )
     # print("Single run")
     exec = Runner()
-    result = await exec.execute_ssh_command(hosts[0], "ls -l /")
+    result = await exec.run(hosts[0], "ls -l /")
     print(json.dumps(result))
 
     # print("Batch run without warmup")
     batch = Pool(hosts=hosts)
-    results = await batch.execute_ssh_commands_in_batch("ls -l /")
+    results = await batch.run("ls -l /")
     print(json.dumps(results))
 
     await batch.warmup()
     # print("Batch run after warmup")
-    results = await batch.execute_ssh_commands_in_batch("ls -l /")
+    results = await batch.run("ls -l /")
     print(json.dumps(results))
 
 

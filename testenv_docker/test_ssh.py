@@ -13,7 +13,7 @@ async def main():
         )
     exec = Runner()
 
-    result = await exec.execute_ssh_command(hosts[0], "ls -l /")
+    result = await exec.run(hosts[0], "ls -l /")
     print(json.dumps(result))
 
 

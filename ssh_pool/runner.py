@@ -111,7 +111,7 @@ class Runner:
             self.logger.error(f"Failed to create connection to {ip}: {e}")
             raise
 
-    async def close_all_connections(self) -> None:
+    async def close_connection(self) -> None:
         self.logger.info("Closing all SSH connections...")
 
         async def _close_single_connection(host: RemoteHost, connection):
@@ -148,7 +148,7 @@ class Runner:
         else:
             return connection
 
-    async def _execute_ssh_command(self, host: RemoteHost, command: str) -> SshResponse:
+    async def _run(self, host: RemoteHost, command: str) -> SshResponse:
         start_time = time.time()
         try:
             conn = await self._get_connection(host)
@@ -234,8 +234,8 @@ class Runner:
                 "execution_time": execution_time,
             }
 
-    async def execute_ssh_command(self, host: RemoteHost, command: str) -> SshResponse:
-        return await self._execute_ssh_command(host, command)
+    async def run(self, host: RemoteHost, command: str) -> SshResponse:
+        return await self._run(host, command)
 
 
 class Pool:
@@ -295,7 +295,7 @@ class Pool:
             f"Connection pool initialized in {execution_time}s: {successful_connections} successful, {failed_connections} failed"
         )
 
-    async def execute_ssh_commands_in_batch(
+    async def run(
         self, command: str
     ) -> List[SshResponse | Exception]:
         start_time: float = time.time()
@@ -304,7 +304,7 @@ class Pool:
         async def worker(host: RemoteHost):
             async with semaphore:
                 try:
-                    return await self.executor._execute_ssh_command(host, command)
+                    return await self.executor._run(host, command)
                 except Exception as e:
                     return e
 
