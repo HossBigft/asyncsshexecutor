@@ -52,7 +52,7 @@ class SshExecutionError(Exception):
 
 class Runner:
     def __init__(self, params: SSHConnectionParams = SSHConnectionParams()) -> None:
-        self.connection_parameters: SSHConnectionParams = params
+        self.connection_parameters: SSHConnectionParaSSHConnectionParamsms = params
         self._connection_pool: dict[str, asyncssh.SSHClientConnection] = {}
         self.logger = getLogger()
 
@@ -227,7 +227,7 @@ class Runner:
                 raise SshExecutionError(host, str(e))
 
             return {
-                "host": host,
+                "host": str(host),
                 "stdout": None,
                 "stderr": str(e),
                 "returncode": -1,

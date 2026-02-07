@@ -9,8 +9,12 @@ RUN mkdir /var/run/sshd
 RUN useradd -m -s /bin/bash "${USERNAME:-testuser}" && \
     echo "${USERNAME:-testuser}:${PASSWORD:-testpass}" | chpasswd
 
-
+RUN mkdir -p /home/testuser/.ssh && \
+    chmod 700 /home/testuser/.ssh && \
+    chown testuser:testuser /home/testuser/.ssh
+    
 RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
-    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
+    sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config
 
 CMD ["/usr/sbin/sshd", "-D"]
