@@ -239,34 +239,40 @@ class Runner:
 
 
 class BatchRunner:
+
     def __init__(
         self,
         hosts: list[RemoteHost],
         params: SSHConnectionParams = SSHConnectionParams(),
+        max_concurrency: int = 100,
     ) -> None:
+        if not hosts:
+            raise ValueError("At least one SSH server must be provided.")
+
         self.executor: Runner = Runner(params=params)
         self.hosts: dict[str, RemoteHost] = {str(host): host for host in hosts}
+        self.max_concurrency = max_concurrency
         self.logger = getLogger()
 
-    async def initialize_connection_pool(self) -> None:
-        start_time = time.time()
-
-        ssh_host_list: list[RemoteHost] = list(self.hosts.values())
-        if not ssh_host_list:
-            raise ValueError("No SSH hosts are given to initialize connections with.")
-
+    async def warmup(self) -> None:
         self.logger.info(
-            f"Initializing SSH connection pool for {len(ssh_host_list)} hosts..."
+            f"Initializing SSH connection pool for {len(self.hosts)} servers..."
         )
+        start_time = time.monotonic()
+        semaphore = asyncio.Semaphore(self.max_concurrency)
 
-        semaphore = asyncio.Semaphore(100)
-
-        async def _create_connection_with_limit(host: RemoteHost):
+        async def _create_connection_with_limit(
+            host: RemoteHost,
+        ) -> tuple[RemoteHost, asyncssh.SSHClientConnection | Exception]:
             async with semaphore:
-                return await self.executor._create_connection(host)
+                try:
+                    connection = await self.executor._get_connection(host)
+                    return host, connection
+                except Exception as exc:
+                    return host, exc
 
         connection_tasks = []
-        for host in ssh_host_list:
+        for host in self.hosts.values():
             connection_tasks.append(_create_connection_with_limit(host))
 
         results = await asyncio.gather(*connection_tasks, return_exceptions=True)
@@ -274,16 +280,17 @@ class BatchRunner:
         successful_connections = 0
         failed_connections = 0
 
-        for i, result in enumerate(results):
-            host = ssh_host_list[i]
+        for result in results:
             if isinstance(result, Exception):
-                self.logger.error(f"Failed to connect to {host}: {result}")
+                self.logger.error("Failed to connect: %s", result)
                 failed_connections += 1
-            else:
-                self.logger.info(f"Successfully connected to {host}")
-                successful_connections += 1
-        end_time = time.time()
-        execution_time = end_time - start_time
+                continue
+
+            host, _ = result
+            self.logger.info("Successfully connected to %s", host)
+            successful_connections += 1
+        execution_time = time.monotonic() - start_time
+
         self.logger.info(
             f"Connection pool initialized in {execution_time}s: {successful_connections} successful, {failed_connections} failed"
         )

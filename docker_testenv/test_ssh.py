@@ -20,6 +20,7 @@ async def main():
     results = await batch.execute_ssh_commands_in_batch("ls -l /")
     print(json.dumps(results))
 
+    await batch.warmup()
     # print("Batch run after warmup")
     results = await batch.execute_ssh_commands_in_batch("ls -l /")
     print(json.dumps(results))
