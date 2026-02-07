@@ -56,7 +56,7 @@ class Runner:
         self._connection_pool: dict[str, asyncssh.SSHClientConnection] = {}
         self.logger = getLogger()
 
-    async def run_with_adaptive_timeout(
+    async def _run_with_adaptive_timeout(
         self,
         coro_factory: Callable[..., Any],
         base_timeout: float = 1.0,
