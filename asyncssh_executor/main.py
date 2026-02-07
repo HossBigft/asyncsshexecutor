@@ -8,8 +8,24 @@ from logging import getLogger
 from typing import List, Callable, Any, TypedDict
 
 
+@dataclass
+class SSHHost:
+    ip: str
+    username: str
+    password: str | None = None
+    private_key_path: str | None = None
+    public_key_path: str | None = None
+    port: int = 22
+
+    def __post_init__(self):
+        if not (self.password or self.private_key_path):
+            raise ValueError(
+                "Either 'password' or 'private_key_path' must be provided for SSH authentication."
+            )
+
+
 class SshResponse(TypedDict):
-    host: str
+    host: SSHHost
     stdout: str | None
     stderr: str | None
     returncode: int | None
@@ -18,32 +34,23 @@ class SshResponse(TypedDict):
 
 @dataclass
 class SSHConnectionParams:
-    hosts_ip: list[str]
-    username: str
-    known_hosts: list[str] | None
-    private_key_path: str | None
-    public_key_path: str | None
+    known_hosts: list[str] | None = None
     login_timeout_s: int = 3
-
-
-@dataclass
-class SSHExecutorConfig:
     execution_timeout_s: int = 5
     connection_timeout_s: int = 15
     max_connection_timeout_s: int = 30
 
 
 class SshExecutionError(Exception):
-    def __init__(self, host: str, message: str | None):
+    def __init__(self, host: SSHHost, message: str | None):
         super().__init__(f"SSH access denied for {host}: {message}")
         self.host = host
         self.message = message
 
 
 class AsyncSSHExecutor:
-    def __init__(self, params: SSHConnectionParams, config: SSHExecutorConfig) -> None:
+    def __init__(self, params: SSHConnectionParams = SSHConnectionParams()) -> None:
         self.connection_parameters: SSHConnectionParams = params
-        self.config = config
         self._connection_pool: dict[str, asyncssh.SSHClientConnection] = {}
         self.logger = getLogger()
 
@@ -72,19 +79,20 @@ class AsyncSSHExecutor:
                         raise
                 timeout = min(timeout * factor, max_timeout)
 
-    async def _create_connection(self, ip: str) -> asyncssh.SSHClientConnection:
+    async def _create_connection(self, host: SSHHost) -> asyncssh.SSHClientConnection:
         start_time = time.time()
+        ip = host.ip
+        username = host.username
         try:
-
             connection = await self.run_with_adaptive_timeout(
                 lambda: asyncssh.connect(
                     ip,
-                    username=self.connection_parameters.username,
+                    username=username,
                     known_hosts=self.connection_parameters.known_hosts,
                     login_timeout=self.connection_parameters.login_timeout_s,
                 ),
-                base_timeout=self.config.connection_timeout_s,
-                max_timeout=self.config.max_connection_timeout_s,
+                base_timeout=self.connection_parameters.connection_timeout_s,
+                max_timeout=self.connection_parameters.max_connection_timeout_s,
                 max_retries=3,
             )
             self._connection_pool[ip] = connection
@@ -97,50 +105,10 @@ class AsyncSSHExecutor:
             self.logger.error(f"Failed to create connection to {ip}: {e}")
             raise
 
-    async def initialize_connection_pool(self) -> None:
-        start_time = time.time()
-
-        ssh_host_list: list[str] = self.connection_parameters.hosts_ip
-        if not ssh_host_list:
-            raise ValueError("No SSH hosts are given to initialize connections with.")
-
-        self.logger.info(
-            f"Initializing SSH connection pool for {len(ssh_host_list)} hosts..."
-        )
-
-        semaphore = asyncio.Semaphore(100)
-
-        async def _create_connection_with_limit(host: str):
-            async with semaphore:
-                return await self._create_connection(host)
-
-        connection_tasks = []
-        for host in ssh_host_list:
-            connection_tasks.append(_create_connection_with_limit(host))
-
-        results = await asyncio.gather(*connection_tasks, return_exceptions=True)
-
-        successful_connections = 0
-        failed_connections = 0
-
-        for i, result in enumerate(results):
-            host = ssh_host_list[i]
-            if isinstance(result, Exception):
-                self.logger.error(f"Failed to connect to {host}: {result}")
-                failed_connections += 1
-            else:
-                self.logger.info(f"Successfully connected to {host}")
-                successful_connections += 1
-        end_time = time.time()
-        execution_time = end_time - start_time
-        self.logger.info(
-            f"Connection pool initialized in {execution_time}s: {successful_connections} successful, {failed_connections} failed"
-        )
-
     async def close_all_connections(self) -> None:
         self.logger.info("Closing all SSH connections...")
 
-        async def _close_single_connection(host: str, connection):
+        async def _close_single_connection(host: SSHHost, connection):
             try:
                 connection.close()
                 self.logger.info(f"Closed connection to {host}")
@@ -158,28 +126,29 @@ class AsyncSSHExecutor:
         self._connection_pool.clear()
         self.logger.info("All SSH connections closed")
 
-    async def _get_connection(self, ip: str) -> asyncssh.SSHClientConnection:
-
+    async def _get_connection(self, host: SSHHost) -> asyncssh.SSHClientConnection:
+        ip = host.ip
         connection: asyncssh.SSHClientConnection | None = self._connection_pool.get(ip)
         if not connection:
             self.logger.info(f"Connection to {ip} is not found, creating.")
-            connection = await self._create_connection(ip)
+            connection = await self._create_connection(host)
             self._connection_pool[ip] = connection
             return connection
         if connection.is_closed():
             self.logger.warning(f"Connection to {ip} is dead, recreating...")
-            connection = await self._create_connection(ip)
+            connection = await self._create_connection(host)
             self._connection_pool[ip] = connection
             return connection
         else:
             return connection
 
-    async def _execute_ssh_command(self, host: str, command: str) -> SshResponse:
+    async def _execute_ssh_command(self, host: SSHHost, command: str) -> SshResponse:
         start_time = time.time()
         try:
             conn = await self._get_connection(host)
             result = await asyncio.wait_for(
-                conn.run(command), timeout=self.config.execution_timeout_s
+                conn.run(command),
+                timeout=self.connection_parameters.execution_timeout_s,
             )
             end_time = time.time()
             execution_time = end_time - start_time
@@ -259,31 +228,76 @@ class AsyncSSHExecutor:
                 "execution_time": execution_time,
             }
 
+    async def execute_ssh_command(self, host: SSHHost, command: str) -> SshResponse:
+        return await self._execute_ssh_command(host, command)
+
+
+class AsyncBatchSSHExecutor:
+    def __init__(self, params: SSHConnectionParams) -> None:
+        self.executor: AsyncSSHExecutor = AsyncSSHExecutor(params=params)
+        self.hosts: dict[str, SSHHost] = {}
+        self.logger = getLogger()
+
+    async def initialize_connection_pool(self) -> None:
+        start_time = time.time()
+
+        ssh_host_list: list[SSHHost] = list(self.hosts.values())
+        if not ssh_host_list:
+            raise ValueError("No SSH hosts are given to initialize connections with.")
+
+        self.logger.info(
+            f"Initializing SSH connection pool for {len(ssh_host_list)} hosts..."
+        )
+
+        semaphore = asyncio.Semaphore(100)
+
+        async def _create_connection_with_limit(host: SSHHost):
+            async with semaphore:
+                return await self.executor._create_connection(host)
+
+        connection_tasks = []
+        for host in ssh_host_list:
+            connection_tasks.append(_create_connection_with_limit(host))
+
+        results = await asyncio.gather(*connection_tasks, return_exceptions=True)
+
+        successful_connections = 0
+        failed_connections = 0
+
+        for i, result in enumerate(results):
+            host = ssh_host_list[i]
+            if isinstance(result, Exception):
+                self.logger.error(f"Failed to connect to {host}: {result}")
+                failed_connections += 1
+            else:
+                self.logger.info(f"Successfully connected to {host}")
+                successful_connections += 1
+        end_time = time.time()
+        execution_time = end_time - start_time
+        self.logger.info(
+            f"Connection pool initialized in {execution_time}s: {successful_connections} successful, {failed_connections} failed"
+        )
+
     async def execute_ssh_commands_in_batch(
         self, command: str
     ) -> List[SshResponse | Exception]:
         start_time: float = time.time()
         semaphore = asyncio.Semaphore(100)
 
-        async def worker(host: str):
+        async def worker(host: SSHHost):
             async with semaphore:
                 try:
-                    return await self._execute_ssh_command(host, command)
+                    return await self.executor._execute_ssh_command(host, command)
                 except Exception as e:
                     return e
 
-        results = await asyncio.gather(
-            *(worker(host) for host in self.connection_parameters.hosts_ip)
-        )
+        results = await asyncio.gather(*(worker(host) for host in self.hosts.values()))
         end_time: float = time.time()
         execution_time: float = end_time - start_time
         self.logger.info(
-            f"Batch size of {len(self.connection_parameters.hosts_ip)} executed in {execution_time}s."
+            f"Batch size of {len(self.hosts.values())} executed in {execution_time}s."
         )
         return results
-
-    async def execute_ssh_command(self, host: str, command: str) -> SshResponse:
-        return await self._execute_ssh_command(host, command)
 
 
 def main():
