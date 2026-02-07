@@ -23,7 +23,8 @@ class SSHHost:
             )
 
     def __str__(self) -> str:
-        return self.ip
+        return f"{self.ip}:{self.port}"
+
 
 class SshResponse(TypedDict):
     host: str
@@ -236,9 +237,11 @@ class AsyncSSHExecutor:
 
 
 class AsyncBatchSSHExecutor:
-    def __init__(self, params: SSHConnectionParams) -> None:
+    def __init__(
+        self, hosts: list[SSHHost], params: SSHConnectionParams = SSHConnectionParams()
+    ) -> None:
         self.executor: AsyncSSHExecutor = AsyncSSHExecutor(params=params)
-        self.hosts: dict[str, SSHHost] = {}
+        self.hosts: dict[str, SSHHost] = {str(host): host for host in hosts}
         self.logger = getLogger()
 
     async def initialize_connection_pool(self) -> None:
