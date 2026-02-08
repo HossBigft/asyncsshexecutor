@@ -60,14 +60,14 @@ class Runner:
         self, host: RemoteHost
     ) -> asyncssh.SSHClientConnection:
         start_time = time.monotonic()
-        ip = host.ip
+        hostname = str(host)
         username = host.username
         try:
             connection: asyncssh.SSHClientConnection
             if host.private_key_path:
                 private_key = asyncssh.read_private_key(host.private_key_path)
                 connection = await asyncssh.connect(
-                    ip,
+                    host.ip,
                     username=username,
                     private_key=private_key,
                     port=host.port,
@@ -77,7 +77,7 @@ class Runner:
 
             else:
                 connection = await asyncssh.connect(
-                    ip,
+                    host.ip,
                     username=username,
                     password=host.password,
                     port=host.port,
@@ -85,32 +85,41 @@ class Runner:
                     login_timeout=self.connection_parameters.login_timeout_s,
                 )
 
-            self._connection_pool[ip] = connection
+            self._connection_pool[hostname] = connection
             return connection
         except asyncio.TimeoutError as e:
             execution_time = time.monotonic() - start_time
-            self.logger.error(f"Connection timed out to {ip} in {execution_time}s: {e}")
-            raise
+            self.logger.error(
+                f"Connection timed out to {hostname} in {execution_time}s: {e}"
+            )
+            raise SshExecutionError(
+                host, f"Connection timed out to {hostname} in {execution_time}s: {e}"
+            )
         except Exception as e:
-            self.logger.error(f"Failed to create connection to {ip}: {e}")
-            raise
+            self.logger.error(f"Failed to create connection to {hostname}: {e}")
+            raise SshExecutionError(
+                host, f"Failed to create connection to {hostname}: {e}"
+            )
 
-    async def close_connections(self) -> None:
-        self.logger.info("Closing all SSH connections...")
-
-        async def _close_single_connection(host: str, connection):
+    async def _close_connection(self, host: str) -> bool:
+        connection: asyncssh.SSHClientConnection | None = self._connection_pool.get(
+            host
+        )
+        if connection:
             try:
                 connection.close()
+                await connection.wait_closed()
                 self.logger.info(f"Closed connection to {host}")
                 return True
             except Exception as e:
                 self.logger.error(f"Error closing connection to {host}: {e}")
                 return False
+        return False
 
-        close_tasks = [
-            _close_single_connection(host, conn)
-            for host, conn in self._connection_pool.items()
-        ]
+    async def close_connections(self) -> None:
+        self.logger.info("Closing all SSH connections...")
+
+        close_tasks = [self._close_connection(host) for host in self._connection_pool]
         await asyncio.gather(*close_tasks, return_exceptions=True)
 
         self._connection_pool.clear()
@@ -211,6 +220,8 @@ class Runner:
                 "returncode": -1,
                 "execution_time": execution_time,
             }
+        finally:
+            await self._close_connection(str(host))
 
 
 class Pool:
