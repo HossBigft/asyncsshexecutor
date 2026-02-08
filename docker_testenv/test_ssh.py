@@ -31,12 +31,12 @@ async def main():
         key_hosts.append(
             RemoteHost(ip="127.0.0.1", username="testuser", password="testpass", port=i)
         )
-    ssh_key_pool = Pool(hosts=key_hosts)
-    results = await ssh_key_pool.run("ls -l /")
-    print(json.dumps(results))
+    async with Pool(hosts=key_hosts) as ssh_key_pool:
+        results = await ssh_key_pool.run("ls -l /")
+        print(json.dumps(results))
 
-    result = ssh_key_pool.run_on_host(host=key_hosts[0], command="ls -l /")
-    print(json.dumps(result))
+        result = await ssh_key_pool.run_on_host(host=key_hosts[0], command="ls -l /")
+        print(json.dumps(result))
 
 
 if __name__ == "__main__":

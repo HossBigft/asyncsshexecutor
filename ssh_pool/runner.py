@@ -95,7 +95,7 @@ class Runner:
             self.logger.error(f"Failed to create connection to {ip}: {e}")
             raise
 
-    async def close_connection(self) -> None:
+    async def close_connections(self) -> None:
         self.logger.info("Closing all SSH connections...")
 
         async def _close_single_connection(host: str, connection):
@@ -291,6 +291,14 @@ class Pool:
 
     async def run_on_host(self, host: RemoteHost, command: str) -> SshResponse:
         return await self.executor.run(host=host, command=command)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if hasattr(self, "executor"):
+            await self.executor.close_connections()
+        return False
 
 
 def main():
