@@ -31,7 +31,7 @@ class SshResponse(TypedDict):
     stdout: str | None
     stderr: str | None
     returncode: int | None
-    execution_time: float | None
+    execution_time_s: float | None
 
 
 @dataclass
@@ -150,7 +150,7 @@ class Runner:
                 timeout=self.connection_parameters.execution_timeout_s,
             )
             end_time = time.monotonic()
-            execution_time = end_time - start_time
+            execution_time_s = end_time - start_time
 
             stdout_output: str | None = (
                 str(result.stdout.strip())
@@ -183,7 +183,7 @@ class Runner:
                 "stdout": stdout_output,
                 "stderr": filtered_stderr_output,
                 "returncode": returncode_output,
-                "execution_time": execution_time,
+                "execution_time_s": execution_time_s,
             }
 
         except asyncssh.PermissionDenied as e:
@@ -193,19 +193,19 @@ class Runner:
             raise SshExecutionError(host, f"Connection lost: {str(e)}")
 
         except asyncssh.TimeoutError as e:
-            execution_time = time.monotonic() - start_time
+            execution_time_s = time.monotonic() - start_time
             raise SshExecutionError(
-                host, f"Connection timed out in {execution_time}s: {str(e)}"
+                host, f"Connection timed out in {execution_time_s}s: {str(e)}"
             )
 
         except asyncio.TimeoutError as e:
-            execution_time = time.monotonic() - start_time
+            execution_time_s = time.monotonic() - start_time
             raise SshExecutionError(
-                host, f"Execution timed out in {execution_time}s: {str(e)}"
+                host, f"Execution timed out in {execution_time_s}s: {str(e)}"
             )
 
         except asyncssh.Error as e:
-            execution_time = time.monotonic() - start_time
+            execution_time_s = time.monotonic() - start_time
             error_message = str(e).lower()
             if (
                 "permission denied" in error_message
@@ -218,10 +218,28 @@ class Runner:
                 "stdout": None,
                 "stderr": str(e),
                 "returncode": -1,
-                "execution_time": execution_time,
+                "execution_time_s": execution_time_s,
             }
         finally:
             await self._close_connection(str(host))
+
+
+@dataclass
+class HostResult:
+    host: str
+    response: SshResponse | None = None
+    error: Exception | None = None
+
+    def success(self) -> bool:
+        return True if not self.error else False
+
+    def to_dict(self) -> dict:
+        return {
+            "host": self.host,
+            "success": self.success(),
+            "response": self.response,
+            "error": str(self.error) if self.error else None,
+        }
 
 
 class Pool:
@@ -281,16 +299,18 @@ class Pool:
             f"Connection pool initialized in {execution_time}s: {successful_connections} successful, {failed_connections} failed"
         )
 
-    async def run(self, command: str) -> List[SshResponse | Exception]:
+    async def run(self, command: str) -> List[HostResult]:
         start_time: float = time.monotonic()
         semaphore = asyncio.Semaphore(self.max_concurrency)
 
         async def worker(host: RemoteHost):
+            host_result: HostResult = HostResult(host=str(host))
             async with semaphore:
                 try:
-                    return await self.executor.run(host, command)
+                    host_result.response = await self.executor.run(host, command)
                 except Exception as e:
-                    return e
+                    host_result.error = e
+            return host_result
 
         results = await asyncio.gather(*(worker(host) for host in self.hosts.values()))
         end_time: float = time.monotonic()
