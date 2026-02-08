@@ -4,7 +4,7 @@ import time
 
 from dataclasses import dataclass
 from logging import getLogger
-from typing import List, Callable, Any, TypedDict
+from typing import List, TypedDict
 
 
 @dataclass
