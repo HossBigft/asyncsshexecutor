@@ -122,7 +122,7 @@ class Runner:
             try:
                 connection.close()
                 await connection.wait_closed()
-                self.logger.info(f"Closed connection to {host}")
+                self.logger.debug(f"Closed connection to {host}")
                 return True
             except Exception as e:
                 self.logger.error(f"Error closing connection to {host}: {e}")
@@ -130,13 +130,13 @@ class Runner:
         return False
 
     async def close_connections(self) -> None:
-        self.logger.info("Closing all SSH connections...")
+        self.logger.debug("Closing all SSH connections...")
 
         close_tasks = [self._close_connection(host) for host in self._connection_pool]
         await asyncio.gather(*close_tasks, return_exceptions=True)
 
         self._connection_pool.clear()
-        self.logger.info("All SSH connections closed")
+        self.logger.debug("All SSH connections closed")
 
     async def _get_or_create_connection(
         self, host: RemoteHost
@@ -144,12 +144,12 @@ class Runner:
         ip = host.ip
         connection: asyncssh.SSHClientConnection | None = self._connection_pool.get(ip)
         if not connection:
-            self.logger.info(f"Connection to {ip} is not found, creating.")
+            self.logger.debug(f"Connection to {str(host)} is not found, creating.")
             connection = await self._create_connection(host)
             self._connection_pool[ip] = connection
             return connection
         if connection.is_closed():
-            self.logger.warning(f"Connection to {ip} is dead, recreating...")
+            self.logger.debug(f"Connection to {str(host)} is dead, recreating...")
             connection = await self._create_connection(host)
             self._connection_pool[ip] = connection
             return connection

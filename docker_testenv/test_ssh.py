@@ -30,7 +30,7 @@ async def main():
     key_hosts: list[RemoteHost] = []
     for i in range(2222, 2222 + 5):
         key_hosts.append(
-            RemoteHost(ip="127.0.0.1", username="testuser", password="testpass", port=i)
+            RemoteHost(ip="127.0.0.1", username="testuser", port=i, private_key_path='./test_key')
         )
     async with Pool(hosts=key_hosts) as ssh_key_pool:
         await ssh_key_pool.warmup()
