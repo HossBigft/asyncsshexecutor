@@ -1,7 +1,8 @@
-from ssh_pool.runner import Runner, RemoteHost, Pool
-
 import json
 import uvloop
+
+from ssh_pool.runner import Runner
+from ssh_pool.pool import RemoteHost, Pool
 
 
 async def main():
