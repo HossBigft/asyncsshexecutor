@@ -38,7 +38,7 @@ class Pool:
         self.executor: Runner = Runner(params=params if params else ConnectionParams())
         self.hosts: dict[str, RemoteHost] = {str(host): host for host in hosts}
         self.max_concurrency = max_concurrency
-        self.logger = getLogger()
+        self.logger = getLogger(__name__)
 
     async def warmup(self) -> None:
         self.logger.info(

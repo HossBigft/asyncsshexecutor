@@ -65,7 +65,7 @@ class Runner:
             params if params else ConnectionParams()
         )
         self._connection_pool: dict[str, asyncssh.SSHClientConnection] = {}
-        self.logger = getLogger()
+        self.logger = getLogger(__name__)
         self._conn_lock = asyncio.Lock()
 
     async def _create_connection(
