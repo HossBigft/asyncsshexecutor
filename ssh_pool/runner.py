@@ -155,17 +155,17 @@ class Runner:
                 else None
             )
 
-            filtered_stderr_output = None
             if stderr_output:
-                stderr_lines = stderr_output.splitlines()
-                filtered_stderr_output = "\n".join(
-                    line
-                    for line in stderr_lines
-                    if not line.lower().startswith("Warning: Permanently added".lower())
-                )
                 filtered_stderr_output = (
-                    filtered_stderr_output if filtered_stderr_output.strip() else None
+                    "\n".join(
+                        line
+                        for line in stderr_output.splitlines()
+                        if not line.lower().startswith("warning: permanently added")
+                    )
+                    or None
                 )
+            else:
+                filtered_stderr_output = None
 
             returncode_output: int | None = result.exit_status
 
