@@ -2,7 +2,7 @@ import asyncio
 import asyncssh
 import time
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from logging import getLogger
 from typing import List, TypedDict
 
@@ -11,9 +11,8 @@ from typing import List, TypedDict
 class RemoteHost:
     ip: str
     username: str
-    password: str | None = None
+    password: str | None = field(default=None, repr=False)
     private_key_path: str | None = None
-    public_key_path: str | None = None
     port: int = 22
 
     def __post_init__(self):
@@ -24,6 +23,16 @@ class RemoteHost:
 
     def __str__(self) -> str:
         return f"{self.ip}:{self.port}"
+
+    def to_dict(self) -> dict:
+
+        return {
+            "ip": self.ip,
+            "username": self.username,
+            "password": "*" * len(self.password) if self.password else None,
+            "private_key_path": self.private_key_path,
+            "port": self.port,
+        }
 
 
 class SshResponse(TypedDict):
