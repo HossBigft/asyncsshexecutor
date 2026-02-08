@@ -60,8 +60,10 @@ class SshExecutionError(Exception):
 
 
 class Runner:
-    def __init__(self, params: ConnectionParams = ConnectionParams()) -> None:
-        self.connection_parameters: ConnectionParams = params
+    def __init__(self, params: ConnectionParams | None = None) -> None:
+        self.connection_parameters: ConnectionParams = (
+            params if params else ConnectionParams()
+        )
         self._connection_pool: dict[str, asyncssh.SSHClientConnection] = {}
         self.logger = getLogger()
         self._conn_lock = asyncio.Lock()
@@ -263,13 +265,13 @@ class Pool:
     def __init__(
         self,
         hosts: list[RemoteHost],
-        params: ConnectionParams = ConnectionParams(),
+        params: ConnectionParams | None = None,
         max_concurrency: int = 100,
     ) -> None:
         if not hosts:
             raise ValueError("At least one SSH server must be provided.")
 
-        self.executor: Runner = Runner(params=params)
+        self.executor: Runner = Runner(params=params if params else ConnectionParams())
         self.hosts: dict[str, RemoteHost] = {str(host): host for host in hosts}
         self.max_concurrency = max_concurrency
         self.logger = getLogger()
