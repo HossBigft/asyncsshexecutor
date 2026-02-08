@@ -143,15 +143,15 @@ class Runner:
             end_time = time.time()
             execution_time = end_time - start_time
 
-            stdout_output: str | None = str(
-                result.stdout.strip()
-                if result.stdout and result.stdout.strip() != ""
+            stdout_output: str | None = (
+                str(result.stdout.strip())
+                if result.stdout and result.stdout.strip()
                 else None
             )
 
-            stderr_output: str | None = str(
-                result.stderr.strip()
-                if result.stderr and result.stderr.strip() != ""
+            stderr_output: str | None = (
+                str(result.stderr.strip())
+                if result.stderr and result.stderr.strip()
                 else None
             )
 
