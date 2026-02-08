@@ -59,7 +59,7 @@ class Runner:
     async def _create_connection(
         self, host: RemoteHost
     ) -> asyncssh.SSHClientConnection:
-        start_time = time.time()
+        start_time = time.monotonic()
         ip = host.ip
         username = host.username
         try:
@@ -88,7 +88,7 @@ class Runner:
             self._connection_pool[ip] = connection
             return connection
         except asyncio.TimeoutError as e:
-            execution_time = time.time() - start_time
+            execution_time = time.monotonic() - start_time
             self.logger.error(f"Connection timed out to {ip} in {execution_time}s: {e}")
             raise
         except Exception as e:
@@ -133,14 +133,14 @@ class Runner:
             return connection
 
     async def run(self, host: RemoteHost, command: str) -> SshResponse:
-        start_time = time.time()
+        start_time = time.monotonic()
         try:
             conn = await self._get_connection(host)
             result = await asyncio.wait_for(
                 conn.run(command),
                 timeout=self.connection_parameters.execution_timeout_s,
             )
-            end_time = time.time()
+            end_time = time.monotonic()
             execution_time = end_time - start_time
 
             stdout_output: str | None = (
@@ -184,19 +184,19 @@ class Runner:
             raise SshExecutionError(host, f"Connection lost: {str(e)}")
 
         except asyncssh.TimeoutError as e:
-            execution_time = time.time() - start_time
+            execution_time = time.monotonic() - start_time
             raise SshExecutionError(
                 host, f"Connection timed out in {execution_time}s: {str(e)}"
             )
 
         except asyncio.TimeoutError as e:
-            execution_time = time.time() - start_time
+            execution_time = time.monotonic() - start_time
             raise SshExecutionError(
                 host, f"Execution timed out in {execution_time}s: {str(e)}"
             )
 
         except asyncssh.Error as e:
-            execution_time = time.time() - start_time
+            execution_time = time.monotonic() - start_time
             error_message = str(e).lower()
             if (
                 "permission denied" in error_message
@@ -271,7 +271,7 @@ class Pool:
         )
 
     async def run(self, command: str) -> List[SshResponse | Exception]:
-        start_time: float = time.time()
+        start_time: float = time.monotonic()
         semaphore = asyncio.Semaphore(self.max_concurrency)
 
         async def worker(host: RemoteHost):
@@ -282,7 +282,7 @@ class Pool:
                     return e
 
         results = await asyncio.gather(*(worker(host) for host in self.hosts.values()))
-        end_time: float = time.time()
+        end_time: float = time.monotonic()
         execution_time: float = end_time - start_time
         self.logger.info(
             f"Batch size of {len(self.hosts.values())} executed in {execution_time}s."
