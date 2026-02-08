@@ -32,6 +32,7 @@ async def main():
             RemoteHost(ip="127.0.0.1", username="testuser", password="testpass", port=i)
         )
     async with Pool(hosts=key_hosts) as ssh_key_pool:
+        await ssh_key_pool.warmup()
         results = await ssh_key_pool.run("ls -l /")
         print(json.dumps([r.to_dict() for r in results]))
 

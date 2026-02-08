@@ -125,7 +125,9 @@ class Runner:
         self._connection_pool.clear()
         self.logger.info("All SSH connections closed")
 
-    async def _get_connection(self, host: RemoteHost) -> asyncssh.SSHClientConnection:
+    async def _get_or_create_connection(
+        self, host: RemoteHost
+    ) -> asyncssh.SSHClientConnection:
         ip = host.ip
         connection: asyncssh.SSHClientConnection | None = self._connection_pool.get(ip)
         if not connection:
@@ -144,7 +146,7 @@ class Runner:
     async def run(self, host: RemoteHost, command: str) -> SshResponse:
         start_time = time.monotonic()
         try:
-            conn = await self._get_connection(host)
+            conn = await self._get_or_create_connection(host)
             result = await asyncio.wait_for(
                 conn.run(command),
                 timeout=self.connection_parameters.execution_timeout_s,
@@ -223,6 +225,9 @@ class Runner:
         finally:
             await self._close_connection(str(host))
 
+    async def create_connection_if_missing(self, host: RemoteHost) -> None:
+        await self._get_or_create_connection(host=host)
+
 
 @dataclass
 class HostResult:
@@ -267,11 +272,11 @@ class Pool:
 
         async def _create_connection_with_limit(
             host: RemoteHost,
-        ) -> tuple[RemoteHost, asyncssh.SSHClientConnection | Exception]:
+        ) -> tuple[RemoteHost, Exception | None]:
             async with semaphore:
                 try:
-                    connection = await self.executor._get_connection(host)
-                    return host, connection
+                    await self.executor.create_connection_if_missing(host)
+                    return host, None
                 except Exception as exc:
                     return host, exc
 
@@ -279,19 +284,19 @@ class Pool:
         for host in self.hosts.values():
             connection_tasks.append(_create_connection_with_limit(host))
 
-        results = await asyncio.gather(*connection_tasks, return_exceptions=True)
+        results = await asyncio.gather(*connection_tasks, return_exceptions=False)
 
         successful_connections = 0
         failed_connections = 0
 
         for result in results:
-            if isinstance(result, Exception):
-                self.logger.error("Failed to connect: %s", result)
+            host, exception = result
+            if exception:
+                self.logger.error(f"Failed to connect to {host}: {exception}")
                 failed_connections += 1
                 continue
 
-            host, _ = result
-            self.logger.info("Successfully connected to %s", host)
+            self.logger.info(f"Successfully connected to {host}")
             successful_connections += 1
         execution_time = time.monotonic() - start_time
 
