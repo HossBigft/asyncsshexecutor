@@ -178,31 +178,25 @@ class Runner:
             }
 
         except asyncssh.PermissionDenied as e:
-            end_time = time.time()
-            execution_time = end_time - start_time
             raise SshExecutionError(host, f"Permission denied: {str(e)}")
 
         except asyncssh.ConnectionLost as e:
-            end_time = time.time()
-            execution_time = end_time - start_time
             raise SshExecutionError(host, f"Connection lost: {str(e)}")
 
         except asyncssh.TimeoutError as e:
-            end_time = time.time()
-            execution_time = end_time - start_time
-            raise SshExecutionError(host, f"Connection timed out: {str(e)}")
+            execution_time = time.time() - start_time
+            raise SshExecutionError(
+                host, f"Connection timed out in {execution_time}s: {str(e)}"
+            )
 
         except asyncio.TimeoutError as e:
-            end_time = time.time()
-            execution_time = end_time - start_time
+            execution_time = time.time() - start_time
             raise SshExecutionError(
                 host, f"Execution timed out in {execution_time}s: {str(e)}"
             )
 
         except asyncssh.Error as e:
-            end_time = time.time()
-            execution_time = end_time - start_time
-
+            execution_time = time.time() - start_time
             error_message = str(e).lower()
             if (
                 "permission denied" in error_message
