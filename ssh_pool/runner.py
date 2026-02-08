@@ -64,6 +64,7 @@ class Runner:
         self.connection_parameters: ConnectionParams = params
         self._connection_pool: dict[str, asyncssh.SSHClientConnection] = {}
         self.logger = getLogger()
+        self._conn_lock = asyncio.Lock()
 
     async def _create_connection(
         self, host: RemoteHost
@@ -71,44 +72,45 @@ class Runner:
         start_time = time.monotonic()
         hostname = str(host)
         username = host.username
-        try:
-            connection: asyncssh.SSHClientConnection
-            if host.private_key_path:
-                private_key = asyncssh.read_private_key(host.private_key_path)
-                connection = await asyncssh.connect(
-                    host.ip,
-                    username=username,
-                    private_key=private_key,
-                    port=host.port,
-                    known_hosts=self.connection_parameters.known_hosts,
-                    login_timeout=self.connection_parameters.login_timeout_s,
-                )
+        async with self._conn_lock:
+            try:
+                connection: asyncssh.SSHClientConnection
+                if host.private_key_path:
+                    connection = await asyncssh.connect(
+                        host.ip,
+                        username=username,
+                        client_keys=host.private_key_path,
+                        port=host.port,
+                        known_hosts=self.connection_parameters.known_hosts,
+                        login_timeout=self.connection_parameters.login_timeout_s,
+                    )
 
-            else:
-                connection = await asyncssh.connect(
-                    host.ip,
-                    username=username,
-                    password=host.password,
-                    port=host.port,
-                    known_hosts=self.connection_parameters.known_hosts,
-                    login_timeout=self.connection_parameters.login_timeout_s,
-                )
+                else:
+                    connection = await asyncssh.connect(
+                        host.ip,
+                        username=username,
+                        password=host.password,
+                        port=host.port,
+                        known_hosts=self.connection_parameters.known_hosts,
+                        login_timeout=self.connection_parameters.login_timeout_s,
+                    )
 
-            self._connection_pool[hostname] = connection
-            return connection
-        except asyncio.TimeoutError as e:
-            execution_time = time.monotonic() - start_time
-            self.logger.error(
-                f"Connection timed out to {hostname} in {execution_time}s: {e}"
-            )
-            raise SshExecutionError(
-                host, f"Connection timed out to {hostname} in {execution_time}s: {e}"
-            )
-        except Exception as e:
-            self.logger.error(f"Failed to create connection to {hostname}: {e}")
-            raise SshExecutionError(
-                host, f"Failed to create connection to {hostname}: {e}"
-            )
+                self._connection_pool[hostname] = connection
+                return connection
+            except asyncio.TimeoutError as e:
+                execution_time = time.monotonic() - start_time
+                self.logger.error(
+                    f"Connection timed out to {hostname} in {execution_time}s: {e}"
+                )
+                raise SshExecutionError(
+                    host,
+                    f"Connection timed out to {hostname} in {execution_time}s: {e}",
+                )
+            except Exception as e:
+                self.logger.error(f"Failed to create connection to {hostname}: {e}")
+                raise SshExecutionError(
+                    host, f"Failed to create connection to {hostname}: {e}"
+                )
 
     async def _close_connection(self, host: str) -> bool:
         connection: asyncssh.SSHClientConnection | None = self._connection_pool.get(
