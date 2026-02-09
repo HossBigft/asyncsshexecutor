@@ -122,25 +122,6 @@ class Runner:
             )
         return connection
 
-    async def _add_connection_to_pool(
-        self, host: RemoteHost
-    ) -> asyncssh.SSHClientConnection:
-
-        async with self._conn_lock:
-
-            connection: asyncssh.SSHClientConnection
-            if host.jumphost:
-                jumphost_connection: asyncssh.SSHClientConnection | None = (
-                    await self._connect_to_host(host=host.jumphost)
-                )
-                connection = await self._connect_to_host(
-                    host=host, tunnel=jumphost_connection
-                )
-            else:
-                connection = await self._connect_to_host(host=host)
-            self._connection_pool[str(host)] = connection
-            return connection
-
     async def _close_connection(self, host: str) -> bool:
         connection: asyncssh.SSHClientConnection | None = self._connection_pool.get(
             host
@@ -168,19 +149,44 @@ class Runner:
     async def _get_or_create_connection(
         self, host: RemoteHost
     ) -> asyncssh.SSHClientConnection:
-        ip = host.ip
-        connection: asyncssh.SSHClientConnection | None = self._connection_pool.get(ip)
-        if not connection:
-            self.logger.debug(f"Connection to {str(host)} is not found, creating.")
-            connection = await self._add_connection_to_pool(host)
-            self._connection_pool[ip] = connection
+        host_key = str(host)
+
+        connection = self._connection_pool.get(host_key)
+        if connection and not connection.is_closed():
             return connection
-        if connection.is_closed():
-            self.logger.debug(f"Connection to {str(host)} is dead, recreating...")
-            connection = await self._add_connection_to_pool(host)
-            self._connection_pool[ip] = connection
-            return connection
-        else:
+
+        async with self._conn_lock:
+            connection = self._connection_pool.get(host_key)
+            if connection and not connection.is_closed():
+                return connection
+
+            if connection:
+                self.logger.debug(f"Connection to {host_key} is dead, recreating...")
+            else:
+                self.logger.debug(
+                    f"Connection to {host_key} is not found, connecting..."
+                )
+
+            jumphost_connection = None
+            if host.jumphost:
+                jumphost_key = str(host.jumphost)
+                jumphost_connection = self._connection_pool.get(jumphost_key)
+
+                if not jumphost_connection or jumphost_connection.is_closed():
+                    if jumphost_connection:
+                        self.logger.debug(
+                            f"Jumphost {jumphost_key} is dead, recreating..."
+                        )
+                    else:
+                        self.logger.debug(
+                            f"Jumphost connection {jumphost_key} is not found, connecting..."
+                        )
+
+                    jumphost_connection = await self._connect_to_host(host.jumphost)
+                    self._connection_pool[jumphost_key] = jumphost_connection
+
+            connection = await self._connect_to_host(host, tunnel=jumphost_connection)
+            self._connection_pool[host_key] = connection
             return connection
 
     async def run(self, host: RemoteHost, command: str) -> SshResponse:
