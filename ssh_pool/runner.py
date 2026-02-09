@@ -75,106 +75,71 @@ class Runner:
         self.logger = getLogger(__name__)
         self._conn_lock = asyncio.Lock()
 
-    async def _create_connection(
-        self, host: RemoteHost
+    async def _connect_to_host(
+        self, host: RemoteHost, tunnel: asyncssh.SSHClientConnection | None = None
     ) -> asyncssh.SSHClientConnection:
         start_time = time.monotonic()
         hostname = str(host)
-        username = host.username
+        connection: asyncssh.SSHClientConnection
+        try:
+            if host.private_key_path:
+                client_keys = asyncssh.read_private_key(
+                    host.private_key_path, passphrase=host.private_key_password
+                )
+                connection = await asyncssh.connect(
+                    host.ip,
+                    username=host.username,
+                    client_keys=client_keys,
+                    port=host.port,
+                    known_hosts=self.connection_parameters.known_hosts,
+                    login_timeout=self.connection_parameters.login_timeout_s,
+                    tunnel=tunnel,
+                )
+
+            else:
+                connection = await asyncssh.connect(
+                    host.ip,
+                    username=host.username,
+                    password=host.password,
+                    port=host.port,
+                    known_hosts=self.connection_parameters.known_hosts,
+                    login_timeout=self.connection_parameters.login_timeout_s,
+                    tunnel=tunnel,
+                )
+        except asyncio.TimeoutError as e:
+            execution_time = time.monotonic() - start_time
+            self.logger.error(
+                f"Connection timed out to {hostname} in {execution_time}s: {e}"
+            )
+            raise SshExecutionError(
+                host,
+                f"Connection timed out to {hostname} in {execution_time}s: {e}",
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to create connection to {hostname}: {e}")
+            raise SshExecutionError(
+                host, f"Failed to create connection to {hostname}: {e}"
+            )
+        return connection
+
+    async def _add_connection_to_pool(
+        self, host: RemoteHost
+    ) -> asyncssh.SSHClientConnection:
 
         async with self._conn_lock:
-            try:
-                connection: asyncssh.SSHClientConnection
-                if host.jumphost:
-                    jumphost_connection: asyncssh.SSHClientConnection | None
-                    if host.jumphost.private_key_path:
-                        client_keys = asyncssh.read_private_key(
-                            filename=host.jumphost.private_key_path,
-                            passphrase=host.jumphost.private_key_password,
-                        )
 
-                        jumphost_connection = await asyncssh.connect(
-                            host.jumphost.ip,
-                            username=host.jumphost.username,
-                            client_keys=client_keys,
-                            port=host.jumphost.port,
-                            known_hosts=self.connection_parameters.known_hosts,
-                            login_timeout=self.connection_parameters.login_timeout_s,
-                        )
-
-                    else:
-                        jumphost_connection = await asyncssh.connect(
-                            host.jumphost.ip,
-                            username=host.jumphost.username,
-                            password=host.jumphost.password,
-                            port=host.jumphost.port,
-                            known_hosts=self.connection_parameters.known_hosts,
-                            login_timeout=self.connection_parameters.login_timeout_s,
-                        )
-
-                    if host.private_key_path:
-                        client_keys = asyncssh.read_private_key(
-                            host.private_key_path, passphrase=host.private_key_password
-                        )
-                        connection = await asyncssh.connect(
-                            host.ip,
-                            username=username,
-                            client_keys=client_keys,
-                            port=host.port,
-                            known_hosts=self.connection_parameters.known_hosts,
-                            login_timeout=self.connection_parameters.login_timeout_s,
-                            tunnel=jumphost_connection,
-                        )
-
-                    else:
-                        connection = await asyncssh.connect(
-                            host.ip,
-                            username=username,
-                            password=host.password,
-                            port=host.port,
-                            known_hosts=self.connection_parameters.known_hosts,
-                            login_timeout=self.connection_parameters.login_timeout_s,
-                            tunnel=jumphost_connection,
-                        )
-                else:
-                    if host.private_key_path:
-                        client_keys = asyncssh.read_private_key(
-                            host.private_key_path, passphrase=host.private_key_password
-                        )
-                        connection = await asyncssh.connect(
-                            host.ip,
-                            username=username,
-                            client_keys=client_keys,
-                            port=host.port,
-                            known_hosts=self.connection_parameters.known_hosts,
-                            login_timeout=self.connection_parameters.login_timeout_s,
-                        )
-
-                    else:
-                        connection = await asyncssh.connect(
-                            host.ip,
-                            username=username,
-                            password=host.password,
-                            port=host.port,
-                            known_hosts=self.connection_parameters.known_hosts,
-                            login_timeout=self.connection_parameters.login_timeout_s,
-                        )
-                self._connection_pool[hostname] = connection
-                return connection
-            except asyncio.TimeoutError as e:
-                execution_time = time.monotonic() - start_time
-                self.logger.error(
-                    f"Connection timed out to {hostname} in {execution_time}s: {e}"
+            connection: asyncssh.SSHClientConnection
+            if host.jumphost:
+                jumphost_connection: asyncssh.SSHClientConnection | None = (
+                    await self._connect_to_host(host=host.jumphost)
                 )
-                raise SshExecutionError(
-                    host,
-                    f"Connection timed out to {hostname} in {execution_time}s: {e}",
+                connection = await self._connect_to_host(
+                    host=host, tunnel=jumphost_connection
                 )
-            except Exception as e:
-                self.logger.error(f"Failed to create connection to {hostname}: {e}")
-                raise SshExecutionError(
-                    host, f"Failed to create connection to {hostname}: {e}"
-                )
+            else:
+                connection = await self._connect_to_host(host=host)
+            self._connection_pool[str(host)] = connection
+            return connection
 
     async def _close_connection(self, host: str) -> bool:
         connection: asyncssh.SSHClientConnection | None = self._connection_pool.get(
@@ -207,12 +172,12 @@ class Runner:
         connection: asyncssh.SSHClientConnection | None = self._connection_pool.get(ip)
         if not connection:
             self.logger.debug(f"Connection to {str(host)} is not found, creating.")
-            connection = await self._create_connection(host)
+            connection = await self._add_connection_to_pool(host)
             self._connection_pool[ip] = connection
             return connection
         if connection.is_closed():
             self.logger.debug(f"Connection to {str(host)} is dead, recreating...")
-            connection = await self._create_connection(host)
+            connection = await self._add_connection_to_pool(host)
             self._connection_pool[ip] = connection
             return connection
         else:
