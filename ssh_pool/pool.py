@@ -8,16 +8,16 @@ from ssh_pool.runner import Runner, SshResponse, RemoteHost, ConnectionParams
 
 @dataclass
 class HostResult:
-    host: str
+    host: RemoteHost
     response: SshResponse | None = None
     error: Exception | None = None
 
     def success(self) -> bool:
-        return True if not self.error else False
+        return self.error is None
 
-    def to_dict(self) -> dict:
+    def to_dict(self, verbose: bool = False) -> dict:
         return {
-            "host": self.host,
+            "host": self.host if verbose else str(self.host),
             "success": self.success(),
             "response": self.response,
             "error": str(self.error) if self.error else None,
@@ -34,10 +34,10 @@ class Pool:
     ) -> None:
         if not hosts:
             raise ValueError("At least one SSH server must be provided.")
-        
+
         if isinstance(hosts, RemoteHost):
             hosts = [hosts]
-            
+
         self.executor: Runner = Runner(params=params if params else ConnectionParams())
         self.hosts: dict[str, RemoteHost] = {str(host): host for host in hosts}
         self.max_concurrency = max_concurrency
@@ -89,7 +89,7 @@ class Pool:
         semaphore = asyncio.Semaphore(self.max_concurrency)
 
         async def worker(host: RemoteHost):
-            host_result: HostResult = HostResult(host=str(host))
+            host_result: HostResult = HostResult(host=host)
             async with semaphore:
                 try:
                     host_result.response = await self.executor.run(host, command)

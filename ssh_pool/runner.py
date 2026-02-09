@@ -42,11 +42,11 @@ class RemoteHost:
                 else None
             ),
             "port": self.port,
+            "jumphost": self.jumphost.to_dict() if self.jumphost else None,
         }
 
 
 class SshResponse(TypedDict):
-    host: str
     stdout: str | None
     stderr: str | None
     returncode: int | None
@@ -229,7 +229,6 @@ class Runner:
             returncode_output: int | None = result.exit_status
 
             return {
-                "host": str(host),
                 "stdout": stdout_output,
                 "stderr": filtered_stderr_output,
                 "returncode": returncode_output,
@@ -264,7 +263,6 @@ class Runner:
                 raise SshExecutionError(host, str(e))
 
             return {
-                "host": str(host),
                 "stdout": None,
                 "stderr": str(e),
                 "returncode": -1,
