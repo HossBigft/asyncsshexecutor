@@ -34,7 +34,10 @@ class Pool:
     ) -> None:
         if not hosts:
             raise ValueError("At least one SSH server must be provided.")
-
+        
+        if isinstance(hosts, RemoteHost):
+            hosts = [hosts]
+            
         self.executor: Runner = Runner(params=params if params else ConnectionParams())
         self.hosts: dict[str, RemoteHost] = {str(host): host for host in hosts}
         self.max_concurrency = max_concurrency

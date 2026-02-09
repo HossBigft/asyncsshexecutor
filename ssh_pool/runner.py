@@ -15,6 +15,7 @@ class RemoteHost:
     private_key_path: str | None = None
     private_key_password: str | None = field(default=None, repr=False)
     port: int = 22
+    jumphost: "RemoteHost | None" = None
 
     def __post_init__(self):
         if not (self.password or self.private_key_path):
@@ -32,6 +33,11 @@ class RemoteHost:
             "username": self.username,
             "password": "*" * len(self.password) if self.password else None,
             "private_key_path": self.private_key_path,
+            "private_key_password": (
+                "*" * len(self.private_key_password)
+                if self.private_key_password
+                else None
+            ),
             "port": self.port,
         }
 
@@ -75,30 +81,87 @@ class Runner:
         start_time = time.monotonic()
         hostname = str(host)
         username = host.username
+
         async with self._conn_lock:
             try:
                 connection: asyncssh.SSHClientConnection
-                if host.private_key_path:
-                    connection = await asyncssh.connect(
-                        host.ip,
-                        username=username,
-                        client_keys=host.private_key_path,
-                        client_key_passphrase=host.private_key_password,
-                        port=host.port,
-                        known_hosts=self.connection_parameters.known_hosts,
-                        login_timeout=self.connection_parameters.login_timeout_s,
-                    )
+                if host.jumphost:
+                    jumphost_connection: asyncssh.SSHClientConnection | None
+                    if host.jumphost.private_key_path:
+                        client_keys = asyncssh.read_private_key(
+                            filename=host.jumphost.private_key_path,
+                            passphrase=host.jumphost.private_key_password,
+                        )
 
+                        jumphost_connection = await asyncssh.connect(
+                            host.jumphost.ip,
+                            username=host.jumphost.username,
+                            client_keys=client_keys,
+                            port=host.jumphost.port,
+                            known_hosts=self.connection_parameters.known_hosts,
+                            login_timeout=self.connection_parameters.login_timeout_s,
+                        )
+
+                    else:
+                        jumphost_connection = await asyncssh.connect(
+                            host.jumphost.ip,
+                            username=host.jumphost.username,
+                            password=host.jumphost.password,
+                            port=host.jumphost.port,
+                            known_hosts=self.connection_parameters.known_hosts,
+                            login_timeout=self.connection_parameters.login_timeout_s,
+                        )
+
+                    if host.private_key_path:
+                        print(
+                            f"Host { host.private_key_path} host.private_key_password"
+                        )
+                        client_keys = asyncssh.read_private_key(
+                            host.private_key_path, passphrase=host.private_key_password
+                        )
+                        connection = await asyncssh.connect(
+                            host.ip,
+                            username=username,
+                            client_keys=client_keys,
+                            port=host.port,
+                            known_hosts=self.connection_parameters.known_hosts,
+                            login_timeout=self.connection_parameters.login_timeout_s,
+                            tunnel=jumphost_connection,
+                        )
+
+                    else:
+                        connection = await asyncssh.connect(
+                            host.ip,
+                            username=username,
+                            password=host.password,
+                            port=host.port,
+                            known_hosts=self.connection_parameters.known_hosts,
+                            login_timeout=self.connection_parameters.login_timeout_s,
+                            tunnel=jumphost_connection,
+                        )
                 else:
-                    connection = await asyncssh.connect(
-                        host.ip,
-                        username=username,
-                        password=host.password,
-                        port=host.port,
-                        known_hosts=self.connection_parameters.known_hosts,
-                        login_timeout=self.connection_parameters.login_timeout_s,
-                    )
+                    if host.private_key_path:
+                        client_keys = asyncssh.read_private_key(
+                            host.private_key_path, passphrase=host.private_key_password
+                        )
+                        connection = await asyncssh.connect(
+                            host.ip,
+                            username=username,
+                            client_keys=client_keys,
+                            port=host.port,
+                            known_hosts=self.connection_parameters.known_hosts,
+                            login_timeout=self.connection_parameters.login_timeout_s,
+                        )
 
+                    else:
+                        connection = await asyncssh.connect(
+                            host.ip,
+                            username=username,
+                            password=host.password,
+                            port=host.port,
+                            known_hosts=self.connection_parameters.known_hosts,
+                            login_timeout=self.connection_parameters.login_timeout_s,
+                        )
                 self._connection_pool[hostname] = connection
                 return connection
             except asyncio.TimeoutError as e:
