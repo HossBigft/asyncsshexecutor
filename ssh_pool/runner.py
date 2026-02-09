@@ -184,15 +184,9 @@ class Runner:
                     host.jumphost
                 )
 
-            try:
-                connection = await self._connect_to_host(
-                    host, tunnel=jumphost_connection
-                )
-                self._connection_pool[host_key] = connection
-                return connection
-            except Exception as e:
-                self.logger.error(f"Failed to connect to {host_key}: {e}")
-                raise
+            connection = await self._connect_to_host(host, tunnel=jumphost_connection)
+            self._connection_pool[host_key] = connection
+            return connection
 
     async def run(self, host: RemoteHost, command: str) -> SshResponse:
         start_time = time.monotonic()
