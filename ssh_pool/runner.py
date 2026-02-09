@@ -113,9 +113,6 @@ class Runner:
                         )
 
                     if host.private_key_path:
-                        print(
-                            f"Host { host.private_key_path} host.private_key_password"
-                        )
                         client_keys = asyncssh.read_private_key(
                             host.private_key_path, passphrase=host.private_key_password
                         )
