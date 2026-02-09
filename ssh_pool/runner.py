@@ -13,6 +13,7 @@ class RemoteHost:
     username: str
     password: str | None = field(default=None, repr=False)
     private_key_path: str | None = None
+    private_key_password: str | None = field(default=None, repr=False)
     port: int = 22
 
     def __post_init__(self):
@@ -82,6 +83,7 @@ class Runner:
                         host.ip,
                         username=username,
                         client_keys=host.private_key_path,
+                        client_key_passphrase=host.private_key_password,
                         port=host.port,
                         known_hosts=self.connection_parameters.known_hosts,
                         login_timeout=self.connection_parameters.login_timeout_s,
