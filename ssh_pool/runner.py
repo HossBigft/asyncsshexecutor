@@ -11,6 +11,7 @@ from typing import TypedDict
 class RemoteHost:
     ip: str
     username: str
+    name: str | None = None
     password: str | None = field(default=None, repr=False)
     private_key_path: str | None = None
     private_key_password: str | None = field(default=None, repr=False)
@@ -22,9 +23,11 @@ class RemoteHost:
             raise ValueError(
                 "Either 'password' or 'private_key_path' must be provided for SSH authentication."
             )
+        if self.name is None:
+            self.name = f"{self.username}@{self.ip}:{self.port}"
 
     def __str__(self) -> str:
-        return f"{self.ip}:{self.port}"
+        return self.name if self.name else f"{self.username}@{self.ip}:{self.port}"
 
     def to_dict(self) -> dict:
 
