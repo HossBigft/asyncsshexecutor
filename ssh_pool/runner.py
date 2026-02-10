@@ -169,6 +169,27 @@ class Runner:
                 host,
                 f"Login timeout expired to {hostname} in {execution_time}s",
             ) from e
+        except asyncssh.ChannelOpenError as e:
+            self.logger.error(f"{hostname} is not responding on port {host.port}")
+            raise SshExecutionError(
+                host,
+                f"{hostname} is not responding on port {host.port}",
+            ) from e
+        except asyncssh.PermissionDenied as e:
+
+            if host.private_key_path:
+                auth = host.private_key_path
+            elif host.password:
+                auth = "*" * len(host.password)
+            else:
+                auth = "no credentials"
+
+            self.logger.error(f"Authentification failed for {hostname} with {auth}")
+            raise SshExecutionError(
+                host,
+                f"{hostname} is not responding on port {host.port}",
+            ) from e
+
         except Exception as e:
             execution_time: float = time.monotonic() - start_time
             self.logger.error(f"Failed to create connection to {hostname}: {repr(e)}")
