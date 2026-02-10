@@ -89,8 +89,8 @@ class Runner:
     async def _connect_to_host(
         self, host: RemoteHost, tunnel: asyncssh.SSHClientConnection | None = None
     ) -> asyncssh.SSHClientConnection:
-        start_time = time.monotonic()
-        hostname = str(host)
+        start_time: float = time.monotonic()
+        hostname: str = str(host)
         connection: asyncssh.SSHClientConnection
         try:
             if host.private_key_path:
@@ -118,7 +118,7 @@ class Runner:
                     tunnel=tunnel,
                 )
         except asyncio.TimeoutError as e:
-            execution_time = time.monotonic() - start_time
+            execution_time: float = time.monotonic() - start_time
             self.logger.error(
                 f"Connection timed out to {hostname} in {execution_time}s: {e}"
             )
@@ -160,13 +160,15 @@ class Runner:
     async def _get_or_create_connection(
         self, host: RemoteHost
     ) -> asyncssh.SSHClientConnection:
-        host_key = str(host)
+        host_key: str = str(host)
 
-        connection = self._connection_pool.get(host_key)
+        connection: asyncssh.SSHClientConnection | None = self._connection_pool.get(
+            host_key
+        )
         if connection and not connection.is_closed():
             return connection
 
-        host_lock = await self._get_host_lock(host)
+        host_lock: asyncio.Lock = await self._get_host_lock(host)
         async with host_lock:
 
             connection = self._connection_pool.get(host_key)
@@ -181,7 +183,7 @@ class Runner:
             if not connection:
                 self.logger.debug(f"Connection to {host_key} not found, connecting...")
 
-            jumphost_connection = None
+            jumphost_connection: asyncssh.SSHClientConnection | None = None
             if host.jumphost:
                 jumphost_connection = await self._get_or_create_connection(
                     host.jumphost
@@ -192,15 +194,17 @@ class Runner:
             return connection
 
     async def run(self, host: RemoteHost, command: str) -> SshResponse:
-        start_time = time.monotonic()
+        start_time: float = time.monotonic()
         try:
-            conn = await self._get_or_create_connection(host)
+            connection: asyncssh.SSHClientConnection = (
+                await self._get_or_create_connection(host)
+            )
             result = await asyncio.wait_for(
-                conn.run(command),
+                connection.run(command),
                 timeout=self.connection_parameters.execution_timeout_s,
             )
-            end_time = time.monotonic()
-            execution_time_s = end_time - start_time
+            end_time: float = time.monotonic()
+            execution_time_s: float = end_time - start_time
 
             stdout_output: str | None = (
                 str(result.stdout.strip())
@@ -215,7 +219,7 @@ class Runner:
             )
 
             if stderr_output:
-                filtered_stderr_output = (
+                filtered_stderr_output: str | None = (
                     "\n".join(
                         line
                         for line in stderr_output.splitlines()
@@ -242,20 +246,20 @@ class Runner:
             raise SshExecutionError(host, f"Connection lost: {str(e)}")
 
         except asyncssh.TimeoutError as e:
-            execution_time_s = time.monotonic() - start_time
+            execution_time_s: float = time.monotonic() - start_time
             raise SshExecutionError(
                 host, f"Connection timed out in {execution_time_s}s: {str(e)}"
             )
 
         except asyncio.TimeoutError as e:
-            execution_time_s = time.monotonic() - start_time
+            execution_time_s: float = time.monotonic() - start_time
             raise SshExecutionError(
                 host, f"Execution timed out in {execution_time_s}s: {str(e)}"
             )
 
         except asyncssh.Error as e:
-            execution_time_s = time.monotonic() - start_time
-            error_message = str(e).lower()
+            execution_time_s: float = time.monotonic() - start_time
+            error_message: str = str(e).lower()
             if (
                 "permission denied" in error_message
                 or "authentication failed" in error_message
