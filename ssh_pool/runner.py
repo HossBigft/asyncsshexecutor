@@ -126,10 +126,20 @@ class Runner:
                 host,
                 f"Connection timed out to {hostname} in {execution_time}s",
             ) from e
+        except asyncssh.ConnectionLost as e:
+            execution_time: float = time.monotonic() - start_time
+            self.logger.error(
+                f"Login timeout expired to {hostname} in {execution_time}s: {e}"
+            )
+            raise SshExecutionError(
+                host,
+                f"Login timeout expired to {hostname} in {execution_time}s",
+            ) from e
         except Exception as e:
+            execution_time: float = time.monotonic() - start_time
             self.logger.error(f"Failed to create connection to {hostname}: {repr(e)}")
             raise SshExecutionError(
-                host, f"Failed to create connection to {hostname}"
+                host, f"Failed to create connection to {hostname} in {execution_time}s"
             ) from e
         return connection
 
