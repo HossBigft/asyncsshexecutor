@@ -3,7 +3,16 @@ import asyncio
 
 from logging import getLogger
 from dataclasses import dataclass
+from typing import TypedDict, NotRequired
+
+
 from ssh_pool.runner import Runner, SshResponse, RemoteHost, ConnectionParams
+
+
+class ErrorDict(TypedDict):
+    type: str
+    message: str
+    cause: NotRequired["ErrorDict"]
 
 
 @dataclass
@@ -15,12 +24,24 @@ class HostResult:
     def success(self) -> bool:
         return self.error is None
 
+    def serialize_error(self, e: Exception | BaseException) -> ErrorDict:
+
+        result: ErrorDict = {
+            "type": type(e).__name__,
+            "message": str(e),
+        }
+
+        if e.__cause__:
+            result["cause"] = self.serialize_error(e.__cause__)
+
+        return result
+
     def to_dict(self, verbose: bool = False) -> dict:
         return {
             "host": self.host if verbose else str(self.host),
             "success": self.success(),
             "response": self.response,
-            "error": str(self.error) if self.error else None,
+            "error": self.serialize_error(self.error) if self.error else None,
         }
 
 

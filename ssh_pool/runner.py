@@ -124,13 +124,13 @@ class Runner:
             )
             raise SshExecutionError(
                 host,
-                f"Connection timed out to {hostname} in {execution_time}s: {e}",
-            )
+                f"Connection timed out to {hostname} in {execution_time}s",
+            ) from e
         except Exception as e:
-            self.logger.error(f"Failed to create connection to {hostname}: {e}")
+            self.logger.error(f"Failed to create connection to {hostname}: {repr(e)}")
             raise SshExecutionError(
-                host, f"Failed to create connection to {hostname}: {e}"
-            )
+                host, f"Failed to create connection to {hostname}"
+            ) from e
         return connection
 
     async def _close_connection(self, host: str) -> bool:
@@ -248,14 +248,14 @@ class Runner:
         except asyncssh.TimeoutError as e:
             execution_time_s: float = time.monotonic() - start_time
             raise SshExecutionError(
-                host, f"Connection timed out in {execution_time_s}s: {str(e)}"
-            )
+                host, f"Connection timed out in {execution_time_s}s"
+            ) from e
 
         except asyncio.TimeoutError as e:
             execution_time_s: float = time.monotonic() - start_time
             raise SshExecutionError(
-                host, f"Execution timed out in {execution_time_s}s: {str(e)}"
-            )
+                host, f"Execution timed out in {execution_time_s}s"
+            ) from e
 
         except asyncssh.Error as e:
             execution_time_s: float = time.monotonic() - start_time
@@ -264,7 +264,7 @@ class Runner:
                 "permission denied" in error_message
                 or "authentication failed" in error_message
             ):
-                raise SshExecutionError(host, str(e))
+                raise SshExecutionError(host, str(e)) from e
 
             return {
                 "stdout": None,
