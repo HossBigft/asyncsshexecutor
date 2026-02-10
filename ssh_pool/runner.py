@@ -78,6 +78,9 @@ class Runner:
         self.logger = getLogger(__name__)
         self._host_locks: dict[str, asyncio.Lock] = {}
         self._locks_lock = asyncio.Lock()
+        self._keys: dict[str, asyncssh.SSHKey] = {}
+        self._key_locks: dict[str, asyncio.Lock] = {}
+        self._keydict_lock = asyncio.Lock()
 
     async def _get_host_lock(self, host: RemoteHost) -> asyncio.Lock:
         host_key: str = str(host)
@@ -85,6 +88,37 @@ class Runner:
             if host_key not in self._host_locks:
                 self._host_locks[host_key] = asyncio.Lock()
             return self._host_locks[host_key]
+
+    async def _get_key_lock(self, key_path: str) -> asyncio.Lock:
+        async with self._keydict_lock:
+            lock = self._key_locks.get(key_path)
+            if lock is None:
+                lock = asyncio.Lock()
+                self._key_locks[key_path] = lock
+            return lock
+
+    async def _get_key(self, path: str, passphrase: str | None):
+        key_id = path
+
+        key = self._keys.get(key_id)
+        if key is not None:
+            return key
+
+        key_lock = await self._get_key_lock(key_id)
+
+        async with key_lock:
+            key = self._keys.get(key_id)
+            if key is not None:
+                return key
+
+            key = await asyncio.to_thread(
+                asyncssh.read_private_key,
+                path,
+                passphrase=passphrase,
+            )
+
+            self._keys[key_id] = key
+            return key
 
     async def _connect_to_host(
         self, host: RemoteHost, tunnel: asyncssh.SSHClientConnection | None = None
@@ -94,13 +128,13 @@ class Runner:
         connection: asyncssh.SSHClientConnection
         try:
             if host.private_key_path:
-                client_keys = asyncssh.read_private_key(
-                    host.private_key_path, passphrase=host.private_key_password
+                key = await self._get_key(
+                    host.private_key_path, host.private_key_password
                 )
                 connection = await asyncssh.connect(
                     host.ip,
                     username=host.username,
-                    client_keys=client_keys,
+                    client_keys=key,
                     port=host.port,
                     known_hosts=self.connection_parameters.known_hosts,
                     login_timeout=self.connection_parameters.login_timeout_s,
