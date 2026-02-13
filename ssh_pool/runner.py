@@ -4,21 +4,29 @@ import time
 
 from dataclasses import dataclass, field
 from logging import getLogger
-from typing import TypedDict
+from typing import TypedDict, cast
 
 
 @dataclass
 class RemoteHost:
-    ip: str
     username: str
+    ip: str | None = None
+    domain: str | None = None
     name: str | None = None
     password: str | None = field(default=None, repr=False)
     private_key_path: str | None = None
     private_key_password: str | None = field(default=None, repr=False)
     port: int = 22
     jumphost: "RemoteHost | None" = None
+    _address: str = field(init=False)
 
     def __post_init__(self):
+        if not (self.ip or self.domain):
+            raise ValueError(
+                "Either 'IP' or 'domain' must be provided for SSH connection."
+            )
+        self._address = cast(str, self.ip or self.domain)
+
         if not (self.password or self.private_key_path):
             raise ValueError(
                 "Either 'password' or 'private_key_path' must be provided for SSH authentication."
@@ -44,6 +52,9 @@ class RemoteHost:
             "port": self.port,
             "jumphost": self.jumphost.to_dict() if self.jumphost else None,
         }
+
+    def address(self) -> str:
+        return self._address
 
 
 class SshResponse(TypedDict):
@@ -132,7 +143,7 @@ class Runner:
                     host.private_key_path, host.private_key_password
                 )
                 connection = await asyncssh.connect(
-                    host.ip,
+                    host=host.address(),
                     username=host.username,
                     client_keys=key,
                     port=host.port,
@@ -143,7 +154,7 @@ class Runner:
 
             else:
                 connection = await asyncssh.connect(
-                    host.ip,
+                    host=host.address(),
                     username=host.username,
                     password=host.password,
                     port=host.port,
