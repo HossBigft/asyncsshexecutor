@@ -68,7 +68,7 @@ class ExecutionResult:
         return {
             "stdout": self.stdout,
             "stderr": self.stderr,
-            "retruncode": self.returncode,
+            "returncode": self.returncode,
             "execution_time_s": self.execution_time_s,
         }
 
