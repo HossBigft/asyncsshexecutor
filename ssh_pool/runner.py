@@ -4,7 +4,7 @@ import time
 
 from dataclasses import dataclass, field
 from logging import getLogger
-from typing import TypedDict, cast
+from typing import cast
 
 
 @dataclass
@@ -57,11 +57,20 @@ class RemoteHost:
         return self._address
 
 
-class SshResponse(TypedDict):
+@dataclass
+class SshResponse:
     stdout: str | None
     stderr: str | None
     returncode: int | None
     execution_time_s: float | None
+
+    def to_dict(self) -> dict:
+        return {
+            "stdout": self.stdout,
+            "stderr": self.stderr,
+            "retruncode": self.returncode,
+            "execution_time_s": self.execution_time_s,
+        }
 
 
 @dataclass
@@ -308,12 +317,12 @@ class Runner:
 
             returncode_output: int | None = result.exit_status
 
-            return {
-                "stdout": stdout_output,
-                "stderr": filtered_stderr_output,
-                "returncode": returncode_output,
-                "execution_time_s": execution_time_s,
-            }
+            return SshResponse(
+                stdout=stdout_output,
+                stderr=filtered_stderr_output,
+                returncode=returncode_output,
+                execution_time_s=execution_time_s,
+            )
 
         except asyncssh.PermissionDenied as e:
             raise SshExecutionError(host, f"Permission denied: {str(e)}")
@@ -342,12 +351,12 @@ class Runner:
             ):
                 raise SshExecutionError(host, str(e)) from e
 
-            return {
-                "stdout": None,
-                "stderr": str(e),
-                "returncode": -1,
-                "execution_time_s": execution_time_s,
-            }
+            return SshResponse(
+                stdout=None,
+                stderr=str(e),
+                returncode=-1,
+                execution_time_s=execution_time_s,
+            )
         finally:
             await self._close_connection(str(host))
 

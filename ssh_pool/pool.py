@@ -40,7 +40,7 @@ class HostResult:
         return {
             "host": self.host if verbose else str(self.host),
             "success": self.success(),
-            "response": self.response,
+            "response": self.response.to_dict() if self.response else None,
             "error": self.serialize_error(self.error) if self.error else None,
         }
 
