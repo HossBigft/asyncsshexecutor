@@ -68,6 +68,7 @@ class _ConnectionPool:
         hosts: list[RemoteHost],
         connection_parameters: ConnectionParams | None = None,
         max_concurrent_handshakes: int = 5,
+        max_open_connections: int = 40,
     ) -> None:
         if not hosts:
             raise ValueError("At least one SSH server must be provided.")
@@ -78,7 +79,8 @@ class _ConnectionPool:
         self.logger = getLogger(__name__)
 
         self.hosts: dict[str, RemoteHost] = {str(host): host for host in hosts}
-        self.max_concurrent_handshakes = max_concurrent_handshakes
+        self._handshakes_semaphore = asyncio.Semaphore(max_concurrent_handshakes)
+        self._connection_semaphore = asyncio.Semaphore(max_open_connections)
 
         self._host_locks: dict[str, asyncio.Lock] = {}
         self._locks_lock = asyncio.Lock()
@@ -92,14 +94,13 @@ class _ConnectionPool:
             f"Initializing SSH connection pool for {len(self.hosts)} servers..."
         )
         start_time = time.monotonic()
-        semaphore = asyncio.Semaphore(self.max_concurrent_handshakes)
 
         async def _create_connection_with_limit(
             host: RemoteHost,
         ) -> tuple[RemoteHost, Exception | None]:
-            async with semaphore:
+            async with self._handshakes_semaphore:
                 try:
-                    await self._get_or_create_connection(host)
+                    await self.get_or_create_connection(host)
                     return host, None
                 except Exception as exc:
                     return host, exc
@@ -261,7 +262,7 @@ class _ConnectionPool:
         self._connection_pool.clear()
         self.logger.debug("All SSH connections closed")
 
-    async def _get_or_create_connection(
+    async def get_or_create_connection(
         self, host: RemoteHost
     ) -> asyncssh.SSHClientConnection:
         host_key: str = str(host)
@@ -273,8 +274,7 @@ class _ConnectionPool:
             return connection
 
         host_lock: asyncio.Lock = await self._get_host_lock(host)
-        async with host_lock:
-
+        async with host_lock, self._connection_semaphore:
             connection = self._connection_pool.get(host_key)
             if connection and not connection.is_closed():
                 return connection
@@ -289,9 +289,7 @@ class _ConnectionPool:
 
             jumphost_connection: asyncssh.SSHClientConnection | None = None
             if host.jumphost:
-                jumphost_connection = await self._get_or_create_connection(
-                    host.jumphost
-                )
+                jumphost_connection = await self.get_or_create_connection(host.jumphost)
 
             connection = await self._connect_to_host(host, tunnel=jumphost_connection)
             self._connection_pool[host_key] = connection
@@ -318,21 +316,20 @@ class Pool:
             hosts=hosts, connection_parameters=connection_parameters
         )
         self._executors: dict[str, Executor] = {str(host): Executor() for host in hosts}
-        self.max_concurrency = max_concurrent_commands
+        self._execution_semaphore = asyncio.Semaphore(max_concurrent_commands)
 
     async def execute(self, command: str) -> AsyncGenerator[HostResult]:
 
         start_time: float = time.monotonic()
-        semaphore = asyncio.Semaphore(self.max_concurrency)
 
         async def worker(host: RemoteHost):
             host_result: HostResult = HostResult(host=host)
             executor: Executor = self._executors.setdefault(str(host), Executor())
-            
-            async with semaphore:
+
+            async with self._execution_semaphore:
                 try:
                     connection: asyncssh.SSHClientConnection = (
-                        await self._connection_pool._get_or_create_connection(host)
+                        await self._connection_pool.get_or_create_connection(host)
                     )
                 except ConnectionError as e:
                     host_result.error = e
