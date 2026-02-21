@@ -12,10 +12,10 @@ async def main():
         hosts.append(
             RemoteHost(ip="127.0.0.1", username="testuser", password="testpass", port=i)
         )
-    # print("Single run")
-    ssh_runner = Executor()
-    result = await ssh_runner.execute(hosts[0], "ls -l /")
-    print(json.dumps(result))
+    # # print("Single run")
+    # ssh_runner = Executor()
+    # result = await ssh_runner.execute(hosts[0], "ls -l /")
+    # print(json.dumps(result))
 
     # print("Batch run without warmup")
     ssh_password_pool = Pool(hosts=hosts)
@@ -30,7 +30,7 @@ async def main():
     key_hosts: list[RemoteHost] = []
     for i in range(2222, 2222 + 5):
         key_hosts.append(
-            RemoteHost(ip="127.0.0.1", username="testuser", port=i, private_key_path='./test_key')
+            RemoteHost(ip="127.0.0.1", username="testuser", port=i, private_key_path='./docker_testenv/test_key')
         )
     async with Pool(hosts=key_hosts) as ssh_key_pool:
         await ssh_key_pool.warmup()
@@ -38,7 +38,7 @@ async def main():
         print(json.dumps([r.to_dict() for r in results]))
 
         result = await ssh_key_pool.execute_on_host(host=key_hosts[0], command="ls -l /")
-        print(json.dumps(result))
+        print(json.dumps(result.to_dict()))
 
 
 if __name__ == "__main__":
