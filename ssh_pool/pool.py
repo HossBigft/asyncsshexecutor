@@ -57,18 +57,17 @@ class ConnectionParams:
 
 class ConnectionError(Exception):
     def __init__(self, host: RemoteHost, message: str | None):
-        super().__init__(f"SSH access denied for {host}: {message}")
+        super().__init__(f"{host}: {message}")
         self.host = host
         self.message = message
 
 
-class Pool:
-
+class _ConnectionPool:
     def __init__(
         self,
         hosts: list[RemoteHost],
         params: ConnectionParams | None = None,
-        max_concurrency: int = 100,
+        max_connections: int = 5,
     ) -> None:
         if not hosts:
             raise ValueError("At least one SSH server must be provided.")
@@ -78,10 +77,8 @@ class Pool:
             hosts = [hosts]
         self.logger = getLogger(__name__)
 
-        self._executors: dict[str, Executor] = {str(host): Executor() for host in hosts}
         self.hosts: dict[str, RemoteHost] = {str(host): host for host in hosts}
-
-        self.max_concurrency = max_concurrency
+        self.max_connections = max_connections
 
         self._host_locks: dict[str, asyncio.Lock] = {}
         self._locks_lock = asyncio.Lock()
@@ -95,7 +92,7 @@ class Pool:
             f"Initializing SSH connection pool for {len(self.hosts)} servers..."
         )
         start_time = time.monotonic()
-        semaphore = asyncio.Semaphore(self.max_concurrency)
+        semaphore = asyncio.Semaphore(self.max_connections)
 
         async def _create_connection_with_limit(
             host: RemoteHost,
@@ -130,45 +127,6 @@ class Pool:
         self.logger.info(
             f"Connection pool initialized in {execution_time}s: {successful_connections} successful, {failed_connections} failed"
         )
-
-    async def execute(self, command: str) -> list[HostResult]:
-
-        start_time: float = time.monotonic()
-        semaphore = asyncio.Semaphore(self.max_concurrency)
-
-        async def worker(host: RemoteHost):
-            executor: Executor = self._executors.setdefault(str(host), Executor())
-            connection: asyncssh.SSHClientConnection = (
-                await self._get_or_create_connection(host)
-            )
-            executor.connection = connection
-            host_result: HostResult = HostResult(host=host)
-            async with semaphore:
-                try:
-                    host_result.response = await executor.execute(host, command)
-                except Exception as e:
-                    host_result.error = e
-            return host_result
-
-        results = await asyncio.gather(*(worker(host) for host in self.hosts.values()))
-        end_time: float = time.monotonic()
-        execution_time: float = end_time - start_time
-        self.logger.info(
-            f"Batch size of {len(self.hosts.values())} executed in {execution_time}s."
-        )
-        return results
-
-    async def execute_on_host(self, host: RemoteHost, command: str) -> ExecutionResult:
-        executor: Executor = self._executors.setdefault(str(host), Executor())
-        return await executor.execute(host=host, command=command)
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if hasattr(self, "executor"):
-            await self.close_connections()
-        return False
 
     async def _get_host_lock(self, host: RemoteHost) -> asyncio.Lock:
         host_key: str = str(host)
@@ -338,6 +296,69 @@ class Pool:
             connection = await self._connect_to_host(host, tunnel=jumphost_connection)
             self._connection_pool[host_key] = connection
             return connection
+
+
+class Pool:
+
+    def __init__(
+        self,
+        hosts: list[RemoteHost],
+        params: ConnectionParams | None = None,
+        max_concurrency: int = 100,
+    ) -> None:
+        if not hosts:
+            raise ValueError("At least one SSH server must be provided.")
+        if not params:
+            self.connection_parameters = ConnectionParams()
+        if isinstance(hosts, RemoteHost):
+            hosts = [hosts]
+        self.logger = getLogger(__name__)
+
+        self._connection_pool = _ConnectionPool(hosts=hosts, params=params)
+        self._executors: dict[str, Executor] = {str(host): Executor() for host in hosts}
+        self.max_concurrency = max_concurrency
+
+    async def execute(self, command: str) -> list[HostResult]:
+
+        start_time: float = time.monotonic()
+        semaphore = asyncio.Semaphore(self.max_concurrency)
+
+        async def worker(host: RemoteHost):
+            executor: Executor = self._executors.setdefault(str(host), Executor())
+            connection: asyncssh.SSHClientConnection = (
+                await self._connection_pool._get_or_create_connection(host)
+            )
+            executor.connection = connection
+            host_result: HostResult = HostResult(host=host)
+            async with semaphore:
+                try:
+                    host_result.response = await executor.execute(host, command)
+                except Exception as e:
+                    host_result.error = e
+            return host_result
+
+        results = await asyncio.gather(
+            *(worker(host) for host in self._connection_pool.hosts.values())
+        )
+        end_time: float = time.monotonic()
+        execution_time: float = end_time - start_time
+        self.logger.info(f"Batch size of {len(results)} executed in {execution_time}s.")
+        return results
+
+    async def execute_on_host(self, host: RemoteHost, command: str) -> ExecutionResult:
+        executor: Executor = self._executors.setdefault(str(host), Executor())
+        return await executor.execute(host=host, command=command)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if hasattr(self, "executor"):
+            await self._connection_pool.close_connections()
+        return False
+
+    async def warmup(self) -> None:
+        await self._connection_pool.warmup()
 
 
 def main():
