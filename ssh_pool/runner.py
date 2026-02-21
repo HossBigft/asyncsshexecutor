@@ -58,7 +58,7 @@ class RemoteHost:
 
 
 @dataclass
-class SshResponse:
+class ExecutionResult:
     stdout: str | None
     stderr: str | None
     returncode: int | None
@@ -82,14 +82,14 @@ class ConnectionParams:
     max_connection_timeout_s: int = 30
 
 
-class SshExecutionError(Exception):
+class ExecutionError(Exception):
     def __init__(self, host: RemoteHost, message: str | None):
         super().__init__(f"SSH access denied for {host}: {message}")
         self.host = host
         self.message = message
 
 
-class Runner:
+class Executor:
     def __init__(self, params: ConnectionParams | None = None) -> None:
         self.connection_parameters: ConnectionParams = (
             params if params else ConnectionParams()
@@ -176,7 +176,7 @@ class Runner:
             self.logger.error(
                 f"Connection timed out to {hostname} in {execution_time}s: {e}"
             )
-            raise SshExecutionError(
+            raise ExecutionError(
                 host,
                 f"Connection timed out to {hostname} in {execution_time}s",
             ) from e
@@ -185,13 +185,13 @@ class Runner:
             self.logger.error(
                 f"Login timeout expired to {hostname} in {execution_time}s: {e}"
             )
-            raise SshExecutionError(
+            raise ExecutionError(
                 host,
                 f"Login timeout expired to {hostname} in {execution_time}s",
             ) from e
         except asyncssh.ChannelOpenError as e:
             self.logger.error(f"{hostname} is not responding on port {host.port}")
-            raise SshExecutionError(
+            raise ExecutionError(
                 host,
                 f"{hostname} is not responding on port {host.port}",
             ) from e
@@ -205,7 +205,7 @@ class Runner:
                 auth = "no credentials"
 
             self.logger.error(f"Authentification failed for {hostname} with {auth}")
-            raise SshExecutionError(
+            raise ExecutionError(
                 host,
                 f"{hostname} is not responding on port {host.port}",
             ) from e
@@ -213,7 +213,7 @@ class Runner:
         except Exception as e:
             execution_time: float = time.monotonic() - start_time
             self.logger.error(f"Failed to create connection to {hostname}: {repr(e)}")
-            raise SshExecutionError(
+            raise ExecutionError(
                 host, f"Failed to create connection to {hostname} in {execution_time}s"
             ) from e
         return connection
@@ -278,7 +278,7 @@ class Runner:
             self._connection_pool[host_key] = connection
             return connection
 
-    async def run(self, host: RemoteHost, command: str) -> SshResponse:
+    async def execute(self, host: RemoteHost, command: str) -> ExecutionResult:
         start_time: float = time.monotonic()
         try:
             connection: asyncssh.SSHClientConnection = (
@@ -317,7 +317,7 @@ class Runner:
 
             returncode_output: int | None = result.exit_status
 
-            return SshResponse(
+            return ExecutionResult(
                 stdout=stdout_output,
                 stderr=filtered_stderr_output,
                 returncode=returncode_output,
@@ -325,20 +325,20 @@ class Runner:
             )
 
         except asyncssh.PermissionDenied as e:
-            raise SshExecutionError(host, f"Permission denied: {str(e)}")
+            raise ExecutionError(host, f"Permission denied: {str(e)}")
 
         except asyncssh.ConnectionLost as e:
-            raise SshExecutionError(host, f"Connection lost: {str(e)}")
+            raise ExecutionError(host, f"Connection lost: {str(e)}")
 
         except asyncssh.TimeoutError as e:
             execution_time_s: float = time.monotonic() - start_time
-            raise SshExecutionError(
+            raise ExecutionError(
                 host, f"Connection timed out in {execution_time_s}s"
             ) from e
 
         except asyncio.TimeoutError as e:
             execution_time_s: float = time.monotonic() - start_time
-            raise SshExecutionError(
+            raise ExecutionError(
                 host, f"Execution timed out in {execution_time_s}s"
             ) from e
 
@@ -349,9 +349,9 @@ class Runner:
                 "permission denied" in error_message
                 or "authentication failed" in error_message
             ):
-                raise SshExecutionError(host, str(e)) from e
+                raise ExecutionError(host, str(e)) from e
 
-            return SshResponse(
+            return ExecutionResult(
                 stdout=None,
                 stderr=str(e),
                 returncode=-1,

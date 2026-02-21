@@ -1,4 +1,4 @@
-from ssh_pool.runner import Runner, RemoteHost
+from ssh_pool.runner import Executor, RemoteHost
 
 import asyncio
 import json
@@ -11,9 +11,9 @@ async def main():
         hosts.append(
             RemoteHost(ip="127.0.0.1", username="testuser", password="testpass", port=i)
         )
-    exec = Runner()
+    exec = Executor()
 
-    result = await exec.run(hosts[0], "ls -l /")
+    result = await exec.execute(hosts[0], "ls -l /")
     print(json.dumps(result))
 
 

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TypedDict, NotRequired
 
 
-from ssh_pool.runner import Runner, SshResponse, RemoteHost, ConnectionParams
+from ssh_pool.runner import Executor, ExecutionResult, RemoteHost, ConnectionParams
 
 
 class ErrorDict(TypedDict):
@@ -18,7 +18,7 @@ class ErrorDict(TypedDict):
 @dataclass
 class HostResult:
     host: RemoteHost
-    response: SshResponse | None = None
+    response: ExecutionResult | None = None
     error: Exception | None = None
 
     def success(self) -> bool:
@@ -59,7 +59,7 @@ class Pool:
         if isinstance(hosts, RemoteHost):
             hosts = [hosts]
 
-        self.executor: Runner = Runner(params=params if params else ConnectionParams())
+        self.executor: Executor = Executor(params=params if params else ConnectionParams())
         self.hosts: dict[str, RemoteHost] = {str(host): host for host in hosts}
         self.max_concurrency = max_concurrency
         self.logger = getLogger(__name__)
@@ -105,7 +105,7 @@ class Pool:
             f"Connection pool initialized in {execution_time}s: {successful_connections} successful, {failed_connections} failed"
         )
 
-    async def run(self, command: str) -> list[HostResult]:
+    async def execute(self, command: str) -> list[HostResult]:
         start_time: float = time.monotonic()
         semaphore = asyncio.Semaphore(self.max_concurrency)
 
@@ -113,7 +113,7 @@ class Pool:
             host_result: HostResult = HostResult(host=host)
             async with semaphore:
                 try:
-                    host_result.response = await self.executor.run(host, command)
+                    host_result.response = await self.executor.execute(host, command)
                 except Exception as e:
                     host_result.error = e
             return host_result
@@ -126,8 +126,8 @@ class Pool:
         )
         return results
 
-    async def run_on_host(self, host: RemoteHost, command: str) -> SshResponse:
-        return await self.executor.run(host=host, command=command)
+    async def execute_on_host(self, host: RemoteHost, command: str) -> ExecutionResult:
+        return await self.executor.execute(host=host, command=command)
 
     async def __aenter__(self):
         return self
