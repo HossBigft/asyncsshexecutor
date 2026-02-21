@@ -5,7 +5,7 @@ import asyncssh
 from logging import getLogger
 from dataclasses import dataclass
 
-from typing import TypedDict, NotRequired
+from typing import TypedDict, NotRequired, AsyncGenerator
 
 from ssh_pool.runner import Executor, ExecutionResult, RemoteHost
 
@@ -66,19 +66,19 @@ class _ConnectionPool:
     def __init__(
         self,
         hosts: list[RemoteHost],
-        params: ConnectionParams | None = None,
-        max_connections: int = 5,
+        connection_parameters: ConnectionParams | None = None,
+        max_concurrent_handshakes: int = 5,
     ) -> None:
         if not hosts:
             raise ValueError("At least one SSH server must be provided.")
-        if not params:
+        if not connection_parameters:
             self.connection_parameters = ConnectionParams()
         if isinstance(hosts, RemoteHost):
             hosts = [hosts]
         self.logger = getLogger(__name__)
 
         self.hosts: dict[str, RemoteHost] = {str(host): host for host in hosts}
-        self.max_connections = max_connections
+        self.max_concurrent_handshakes = max_concurrent_handshakes
 
         self._host_locks: dict[str, asyncio.Lock] = {}
         self._locks_lock = asyncio.Lock()
@@ -92,7 +92,7 @@ class _ConnectionPool:
             f"Initializing SSH connection pool for {len(self.hosts)} servers..."
         )
         start_time = time.monotonic()
-        semaphore = asyncio.Semaphore(self.max_connections)
+        semaphore = asyncio.Semaphore(self.max_concurrent_handshakes)
 
         async def _create_connection_with_limit(
             host: RemoteHost,
@@ -303,22 +303,24 @@ class Pool:
     def __init__(
         self,
         hosts: list[RemoteHost],
-        params: ConnectionParams | None = None,
-        max_concurrency: int = 100,
+        connection_parameters: ConnectionParams | None = None,
+        max_concurrent_commands: int = 100,
     ) -> None:
         if not hosts:
             raise ValueError("At least one SSH server must be provided.")
-        if not params:
+        if not connection_parameters:
             self.connection_parameters = ConnectionParams()
         if isinstance(hosts, RemoteHost):
             hosts = [hosts]
         self.logger = getLogger(__name__)
 
-        self._connection_pool = _ConnectionPool(hosts=hosts, params=params)
+        self._connection_pool = _ConnectionPool(
+            hosts=hosts, connection_parameters=connection_parameters
+        )
         self._executors: dict[str, Executor] = {str(host): Executor() for host in hosts}
-        self.max_concurrency = max_concurrency
+        self.max_concurrency = max_concurrent_commands
 
-    async def execute(self, command: str) -> list[HostResult]:
+    async def execute(self, command: str) -> AsyncGenerator[HostResult]:
 
         start_time: float = time.monotonic()
         semaphore = asyncio.Semaphore(self.max_concurrency)
@@ -337,13 +339,15 @@ class Pool:
                     host_result.error = e
             return host_result
 
-        results = await asyncio.gather(
-            *(worker(host) for host in self._connection_pool.hosts.values())
-        )
+        for coroutine in asyncio.as_completed(
+            worker(host) for host in self._connection_pool.hosts.values()
+        ):
+            yield await coroutine
         end_time: float = time.monotonic()
         execution_time: float = end_time - start_time
-        self.logger.info(f"Batch size of {len(results)} executed in {execution_time}s.")
-        return results
+        self.logger.info(
+            f"Batch size of {len(self._connection_pool.hosts)} executed in {execution_time}s."
+        )
 
     async def execute_on_host(self, host: RemoteHost, command: str) -> ExecutionResult:
         executor: Executor = self._executors.setdefault(str(host), Executor())

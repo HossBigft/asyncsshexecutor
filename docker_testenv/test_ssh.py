@@ -15,13 +15,14 @@ async def main():
 
     sys.stderr.write("Batch run without warmup")
     ssh_password_pool = Pool(hosts=hosts)
-    results = await ssh_password_pool.execute("ls -l /")
-    print(json.dumps([r.to_dict() for r in results]))
+    async for result in ssh_password_pool.execute("ls -l /"):
+        print(json.dumps(result.to_dict()))
 
     await ssh_password_pool.warmup()
     sys.stderr.write("Batch run after warmup")
-    results = await ssh_password_pool.execute("ls -l /")
-    print(json.dumps([r.to_dict() for r in results]))
+
+    async for result in ssh_password_pool.execute("ls -l /"):
+        print(json.dumps(result.to_dict()))
 
     key_hosts: list[RemoteHost] = []
     for i in range(2222, 2222 + 5):
@@ -33,12 +34,12 @@ async def main():
                 private_key_path="./docker_testenv/test_key",
             )
         )
-    async with Pool(hosts=key_hosts) as ssh_key_pool:
-        await ssh_key_pool.warmup()
-        results = await ssh_key_pool.execute("ls -l /")
-        print(json.dumps([r.to_dict() for r in results]))
+    async with Pool(hosts=key_hosts) as ssh_pool_keyauth:
+        await ssh_pool_keyauth.warmup()
+        async for result in ssh_pool_keyauth.execute("ls -l /"):
+            print(json.dumps(result.to_dict()))
 
-        result = await ssh_key_pool.execute_on_host(
+        result = await ssh_pool_keyauth.execute_on_host(
             host=key_hosts[0], command="ls -l /"
         )
         print(json.dumps(result.to_dict()))
