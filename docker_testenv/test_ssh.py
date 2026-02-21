@@ -20,7 +20,7 @@ async def main():
 
     await ssh_password_pool.warmup()
     sys.stderr.write("Batch run after warmup")
-
+    
     async for result in ssh_password_pool.execute("ls -l /"):
         print(json.dumps(result.to_dict()))
 

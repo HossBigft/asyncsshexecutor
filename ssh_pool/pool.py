@@ -326,13 +326,19 @@ class Pool:
         semaphore = asyncio.Semaphore(self.max_concurrency)
 
         async def worker(host: RemoteHost):
-            executor: Executor = self._executors.setdefault(str(host), Executor())
-            connection: asyncssh.SSHClientConnection = (
-                await self._connection_pool._get_or_create_connection(host)
-            )
-            executor.connection = connection
             host_result: HostResult = HostResult(host=host)
+            executor: Executor = self._executors.setdefault(str(host), Executor())
+            
             async with semaphore:
+                try:
+                    connection: asyncssh.SSHClientConnection = (
+                        await self._connection_pool._get_or_create_connection(host)
+                    )
+                except ConnectionError as e:
+                    host_result.error = e
+                    return host_result
+                executor.connection = connection
+
                 try:
                     host_result.response = await executor.execute(host, command)
                 except Exception as e:
