@@ -5,8 +5,8 @@ import asyncssh
 from logging import getLogger
 from dataclasses import dataclass
 
-from typing import TypedDict, NotRequired, AsyncGenerator
-
+from typing import TypedDict, NotRequired
+from collections.abc import AsyncGenerator
 from ssh_pool.runner import Executor, ExecutionResult, RemoteHost
 
 
@@ -74,6 +74,8 @@ class _ConnectionPool:
             raise ValueError("At least one SSH server must be provided.")
         if not connection_parameters:
             self.connection_parameters = ConnectionParams()
+
+        self.connection_parameters = connection_parameters
         if isinstance(hosts, RemoteHost):
             hosts = [hosts]
         self.logger = getLogger(__name__)
@@ -234,7 +236,13 @@ class _ConnectionPool:
             self.logger.error(f"Authentification failed for {hostname} with {auth}")
             raise ConnectionError(
                 host,
-                f"{hostname} is not responding on port {host.port}",
+                f"Authentification failed for {hostname} with {auth}",
+            ) from e
+        except OSError as e:
+            self.logger.error(f"{hostname}: {e}")
+            raise ConnectionError(
+                host,
+                f"{hostname}: {e}",
             ) from e
         return connection
 
@@ -356,7 +364,7 @@ class Pool:
         executor: Executor = self._executors.setdefault(str(host), Executor())
         return await executor.execute(host=host, command=command)
 
-    async def __aenter__(self)-> "Pool":
+    async def __aenter__(self) -> "Pool":
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
