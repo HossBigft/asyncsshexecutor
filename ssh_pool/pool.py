@@ -356,7 +356,7 @@ class Pool:
         executor: Executor = self._executors.setdefault(str(host), Executor())
         return await executor.execute(host=host, command=command)
 
-    async def __aenter__(self):
+    async def __aenter__(self)-> "Pool":
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
