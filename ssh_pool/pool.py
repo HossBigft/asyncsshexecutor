@@ -9,6 +9,8 @@ from typing import TypedDict, NotRequired
 from collections.abc import AsyncGenerator
 from ssh_pool.runner import Executor, ExecutionResult, RemoteHost
 
+logger = getLogger(__name__)
+
 
 class ErrorDict(TypedDict):
     type: str
@@ -80,7 +82,6 @@ class _ConnectionPool:
 
         if isinstance(hosts, RemoteHost):
             hosts = [hosts]
-        self.logger = getLogger(__name__)
 
         self.hosts: dict[str, RemoteHost] = {str(host): host for host in hosts}
         self._handshakes_semaphore = asyncio.Semaphore(
@@ -98,7 +99,7 @@ class _ConnectionPool:
         self._connection_pool: dict[str, asyncssh.SSHClientConnection] = {}
 
     async def warmup(self) -> None:
-        self.logger.info(
+        logger.info(
             f"Initializing SSH connection pool for {len(self.hosts)} servers..."
         )
         start_time = time.monotonic()
@@ -125,15 +126,15 @@ class _ConnectionPool:
         for result in results:
             host, exception = result
             if exception:
-                self.logger.error(f"Failed to connect to {host}: {exception}")
+                logger.error(f"Failed to connect to {host}: {exception}")
                 failed_connections += 1
                 continue
 
-            self.logger.info(f"Successfully connected to {host}")
+            logger.info(f"Successfully connected to {host}")
             successful_connections += 1
         execution_time = time.monotonic() - start_time
 
-        self.logger.info(
+        logger.info(
             f"Connection pool initialized in {execution_time}s: {successful_connections} successful, {failed_connections} failed"
         )
 
@@ -208,7 +209,7 @@ class _ConnectionPool:
                 )
         except asyncio.TimeoutError as e:
             execution_time: float = time.monotonic() - start_time
-            self.logger.error(
+            logger.error(
                 f"Connection timed out to {hostname} in {execution_time}s: {e}"
             )
             raise ConnectionError(
@@ -217,7 +218,7 @@ class _ConnectionPool:
             ) from e
         except asyncssh.ConnectionLost as e:
             execution_time: float = time.monotonic() - start_time
-            self.logger.error(
+            logger.error(
                 f"Login timeout expired to {hostname} in {execution_time}s: {e}"
             )
             raise ConnectionError(
@@ -225,7 +226,7 @@ class _ConnectionPool:
                 f"Login timeout expired to {hostname} in {execution_time}s",
             ) from e
         except asyncssh.ChannelOpenError as e:
-            self.logger.error(f"{hostname} is not responding on port {host.port}")
+            logger.error(f"{hostname} is not responding on port {host.port}")
             raise ConnectionError(
                 host,
                 f"{hostname} is not responding on port {host.port}",
@@ -239,13 +240,13 @@ class _ConnectionPool:
             else:
                 auth = "no credentials"
 
-            self.logger.error(f"Authentification failed for {hostname} with {auth}")
+            logger.error(f"Authentification failed for {hostname} with {auth}")
             raise ConnectionError(
                 host,
                 f"Authentification failed for {hostname} with {auth}",
             ) from e
         except OSError as e:
-            self.logger.error(f"{hostname}: {e}")
+            logger.error(f"{hostname}: {e}")
             raise ConnectionError(
                 host,
                 f"{hostname}: {e}",
@@ -260,21 +261,21 @@ class _ConnectionPool:
             try:
                 connection.close()
                 await connection.wait_closed()
-                self.logger.debug(f"Closed connection to {host}")
+                logger.debug(f"Closed connection to {host}")
                 return True
             except Exception as e:
-                self.logger.error(f"Error closing connection to {host}: {e}")
+                logger.error(f"Error closing connection to {host}: {e}")
                 return False
         return False
 
     async def close_connections(self) -> None:
-        self.logger.debug("Closing all SSH connections...")
+        logger.debug("Closing all SSH connections...")
 
         close_tasks = [self._close_connection(host) for host in self._connection_pool]
         await asyncio.gather(*close_tasks, return_exceptions=True)
 
         self._connection_pool.clear()
-        self.logger.debug("All SSH connections closed")
+        logger.debug("All SSH connections closed")
 
     async def get_or_create_connection(
         self, host: RemoteHost
@@ -294,12 +295,12 @@ class _ConnectionPool:
                 return connection
 
             if connection and connection.is_closed():
-                self.logger.debug(f"Connection to {host_key} is dead, removing...")
+                logger.debug(f"Connection to {host_key} is dead, removing...")
                 del self._connection_pool[host_key]
                 connection = None
 
             if not connection:
-                self.logger.debug(f"Connection to {host_key} not found, connecting...")
+                logger.debug(f"Connection to {host_key} not found, connecting...")
 
             jumphost_connection: asyncssh.SSHClientConnection | None = None
             if host.jumphost:
@@ -327,7 +328,6 @@ class Pool:
 
         if isinstance(hosts, RemoteHost):
             hosts = [hosts]
-        self.logger = getLogger(__name__)
 
         self._executors: dict[str, Executor] = {str(host): Executor() for host in hosts}
         self._execution_semaphore = asyncio.Semaphore(
@@ -364,7 +364,7 @@ class Pool:
             yield await coroutine
         end_time: float = time.monotonic()
         execution_time: float = end_time - start_time
-        self.logger.info(
+        logger.info(
             f"Batch size of {len(self._connection_pool.hosts)} executed in {execution_time}s."
         )
 

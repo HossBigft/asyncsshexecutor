@@ -3,7 +3,6 @@ import asyncssh
 import time
 
 from dataclasses import dataclass, field
-from logging import getLogger
 from typing import cast
 
 
@@ -88,7 +87,6 @@ class Executor:
     ) -> None:
         self.connection = connection
         self.execution_timeout_s = execution_timeout_s
-        self.logger = getLogger(__name__)
 
     async def execute(self, host: RemoteHost, command: str) -> ExecutionResult:
         if not self.connection:
