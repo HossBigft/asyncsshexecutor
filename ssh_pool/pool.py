@@ -99,7 +99,7 @@ class _ConnectionPool:
         self._connection_pool: dict[str, asyncssh.SSHClientConnection] = {}
 
     async def warmup(self) -> None:
-        logger.info(
+        logger.debug(
             f"Initializing SSH connection pool for {len(self.hosts)} servers..."
         )
         start_time = time.monotonic()
@@ -130,11 +130,11 @@ class _ConnectionPool:
                 failed_connections += 1
                 continue
 
-            logger.info(f"Successfully connected to {host}")
+            logger.debug(f"Successfully connected to {host}")
             successful_connections += 1
         execution_time = time.monotonic() - start_time
 
-        logger.info(
+        logger.debug(
             f"Connection pool initialized in {execution_time}s: {successful_connections} successful, {failed_connections} failed"
         )
 
@@ -362,7 +362,7 @@ class Pool:
             yield await coroutine
         end_time: float = time.monotonic()
         execution_time: float = end_time - start_time
-        logger.info(
+        logger.debug(
             f"Batch size of {len(self._connection_pool.hosts)} executed in {execution_time}s."
         )
 
