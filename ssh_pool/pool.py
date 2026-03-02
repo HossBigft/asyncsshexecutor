@@ -316,14 +316,12 @@ class Pool:
     def __init__(
         self,
         hosts: list[RemoteHost],
-        connection_parameters: ConnectionParams | None = None,
+        connection_parameters=ConnectionParams(),
     ) -> None:
         if not hosts:
             raise ValueError("At least one SSH server must be provided.")
-        if not connection_parameters:
-            self.connection_parameters = ConnectionParams()
         self._connection_pool = _ConnectionPool(
-            hosts=hosts, connection_parameters=self.connection_parameters
+            hosts=hosts, connection_parameters=connection_parameters
         )
 
         if isinstance(hosts, RemoteHost):
