@@ -53,6 +53,9 @@ class ConnectionParams:
     execution_timeout_s: int = 5
     connection_timeout_s: int = 15
     max_connection_timeout_s: int = 30
+    max_concurrent_handshakes: int = 5
+    max_open_connections: int = 40
+    max_concurrent_commands: int = 100
 
 
 class ConnectionError(Exception):
@@ -67,22 +70,25 @@ class _ConnectionPool:
         self,
         hosts: list[RemoteHost],
         connection_parameters: ConnectionParams | None = None,
-        max_concurrent_handshakes: int = 5,
-        max_open_connections: int = 40,
     ) -> None:
         if not hosts:
             raise ValueError("At least one SSH server must be provided.")
         if not connection_parameters:
             self.connection_parameters = ConnectionParams()
+        else:
+            self.connection_parameters: ConnectionParams = connection_parameters
 
-        self.connection_parameters = connection_parameters
         if isinstance(hosts, RemoteHost):
             hosts = [hosts]
         self.logger = getLogger(__name__)
 
         self.hosts: dict[str, RemoteHost] = {str(host): host for host in hosts}
-        self._handshakes_semaphore = asyncio.Semaphore(max_concurrent_handshakes)
-        self._connection_semaphore = asyncio.Semaphore(max_open_connections)
+        self._handshakes_semaphore = asyncio.Semaphore(
+            self.connection_parameters.max_concurrent_handshakes
+        )
+        self._connection_semaphore = asyncio.Semaphore(
+            self.connection_parameters.max_open_connections
+        )
 
         self._host_locks: dict[str, asyncio.Lock] = {}
         self._locks_lock = asyncio.Lock()
@@ -310,21 +316,23 @@ class Pool:
         self,
         hosts: list[RemoteHost],
         connection_parameters: ConnectionParams | None = None,
-        max_concurrent_commands: int = 100,
     ) -> None:
         if not hosts:
             raise ValueError("At least one SSH server must be provided.")
         if not connection_parameters:
             self.connection_parameters = ConnectionParams()
+        self._connection_pool = _ConnectionPool(
+            hosts=hosts, connection_parameters=self.connection_parameters
+        )
+
         if isinstance(hosts, RemoteHost):
             hosts = [hosts]
         self.logger = getLogger(__name__)
 
-        self._connection_pool = _ConnectionPool(
-            hosts=hosts, connection_parameters=connection_parameters
-        )
         self._executors: dict[str, Executor] = {str(host): Executor() for host in hosts}
-        self._execution_semaphore = asyncio.Semaphore(max_concurrent_commands)
+        self._execution_semaphore = asyncio.Semaphore(
+            self._connection_pool.connection_parameters.max_concurrent_commands
+        )
 
     async def execute(self, command: str) -> AsyncGenerator[HostResult]:
 
