@@ -194,6 +194,7 @@ class _ConnectionPool:
                     port=host.port,
                     known_hosts=self.connection_parameters.known_hosts,
                     login_timeout=self.connection_parameters.login_timeout_s,
+                    connect_timeout=self.connection_parameters.connection_timeout_s,
                     tunnel=tunnel,
                 )
 
@@ -205,6 +206,7 @@ class _ConnectionPool:
                     port=host.port,
                     known_hosts=self.connection_parameters.known_hosts,
                     login_timeout=self.connection_parameters.login_timeout_s,
+                    connect_timeout=self.connection_parameters.connection_timeout_s,
                     tunnel=tunnel,
                 )
         except asyncio.TimeoutError as e:
