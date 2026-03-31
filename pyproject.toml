@@ -1,10 +1,12 @@
 [project]
-name = "asyncssh_executor"
+name = "ssh_pool"
 version = "0.1.0"
 description = "Module for async execution of commands over SSH"
-readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
     "asyncssh>=2.22.0",
     "uvloop>=0.22.1",
 ]
+
+[tool.setuptools]
+packages = ["ssh_pool"]
